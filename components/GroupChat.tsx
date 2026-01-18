@@ -251,7 +251,7 @@ export const GroupChat: React.FC<GroupChatProps> = ({ currentUser }) => {
                 </button>
                 <button
                   onClick={handleReactivateChat}
-                  disabled={!membershipStatus?.is_deleted}
+                  disabled={!membershipStatus?.is_deleted && !membershipStatus?.is_blocked}
                   className="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 dark:text-white text-sm border-b border-gray-100 dark:border-gray-700 transition-colors"
                 >
                   ↻ Reactivate Chat

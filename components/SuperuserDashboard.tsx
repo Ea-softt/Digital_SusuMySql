@@ -797,11 +797,12 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                             </td>
                             <td className="px-6 py-4">
                                 <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                                    member.verificationStatus !== 'VERIFIED' ? 'bg-yellow-100 text-yellow-700' :
                                     member.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 
                                     member.status === 'SUSPENDED' ? 'bg-red-100 text-red-700' : 
                                     'bg-yellow-100 text-yellow-700'
                                 }`}>
-                                    {member.status}
+                                    {member.verificationStatus !== 'VERIFIED' ? 'PENDING' : member.status}
                                 </span>
                             </td>
                             <td className="px-6 py-4">

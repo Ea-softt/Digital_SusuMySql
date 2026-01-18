@@ -103,6 +103,35 @@ async function setupDatabase() {
             )
         `);
 
+        console.log('📝 Adding missing columns to group_memberships if needed...');
+        try {
+            await connection.query(`
+                ALTER TABLE group_memberships 
+                ADD COLUMN is_blocked BOOLEAN DEFAULT FALSE
+            `);
+            console.log('✅ Added is_blocked column');
+        } catch (e) {
+            if (e.code === 'ER_DUP_FIELDNAME') {
+                console.log('ℹ️ is_blocked column already exists');
+            } else {
+                throw e;
+            }
+        }
+
+        try {
+            await connection.query(`
+                ALTER TABLE group_memberships 
+                ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE
+            `);
+            console.log('✅ Added is_deleted column');
+        } catch (e) {
+            if (e.code === 'ER_DUP_FIELDNAME') {
+                console.log('ℹ️ is_deleted column already exists');
+            } else {
+                throw e;
+            }
+        }
+
         console.log('✅ Database setup complete!');
 
     } catch (error) {

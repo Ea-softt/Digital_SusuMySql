@@ -337,14 +337,14 @@ app.post('/api/group-membership/join', async (req, res) => {
         if (existing.length > 0) {
             // Update existing record
             await pool.query(
-                'UPDATE group_memberships SET status = ?, is_deleted = FALSE, is_blocked = FALSE WHERE user_id = ? AND group_id = ?',
+                'UPDATE group_memberships SET status = ?, is_deleted = 0, is_blocked = 0 WHERE user_id = ? AND group_id = ?',
                 ['ACTIVE', userId, groupId]
             );
         } else {
             // Create new membership
             await pool.query(
                 'INSERT INTO group_memberships (user_id, group_id, role, status, is_blocked, is_deleted) VALUES (?, ?, ?, ?, ?, ?)',
-                [userId, groupId, 'MEMBER', 'ACTIVE', false, false]
+                [userId, groupId, 'MEMBER', 'ACTIVE', 0, 0]
             );
         }
         res.json({ success: true });
@@ -364,13 +364,13 @@ app.post('/api/group-membership/block', async (req, res) => {
 
         if (existing.length > 0) {
             await pool.query(
-                'UPDATE group_memberships SET is_blocked = TRUE WHERE user_id = ? AND group_id = ?',
+                'UPDATE group_memberships SET is_blocked = 1 WHERE user_id = ? AND group_id = ?',
                 [userId, groupId]
             );
         } else {
             await pool.query(
                 'INSERT INTO group_memberships (user_id, group_id, role, status, is_blocked, is_deleted) VALUES (?, ?, ?, ?, ?, ?)',
-                [userId, groupId, 'MEMBER', 'PENDING', true, false]
+                [userId, groupId, 'MEMBER', 'PENDING', 1, 0]
             );
         }
         res.json({ success: true });
@@ -384,7 +384,7 @@ app.post('/api/group-membership/reactivate', async (req, res) => {
     const { userId, groupId } = req.body;
     try {
         await pool.query(
-            'UPDATE group_memberships SET is_deleted = FALSE, status = ? WHERE user_id = ? AND group_id = ?',
+            'UPDATE group_memberships SET is_deleted = 0, status = ? WHERE user_id = ? AND group_id = ?',
             ['ACTIVE', userId, groupId]
         );
         res.json({ success: true });
@@ -398,25 +398,12 @@ app.post('/api/group-membership/delete', async (req, res) => {
     const { userId, groupId } = req.body;
     try {
         await pool.query(
-            'UPDATE group_memberships SET is_deleted = TRUE, status = ? WHERE user_id = ? AND group_id = ?',
+            'UPDATE group_memberships SET is_deleted = 1, status = ? WHERE user_id = ? AND group_id = ?',
             ['SUSPENDED', userId, groupId]
         );
         res.json({ success: true });
     } catch (error) {
         console.error('POST /api/group-membership/delete error:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-app.get('/api/group-membership/:userId/:groupId', async (req, res) => {
-    try {
-        const [rows] = await pool.query(
-            'SELECT * FROM group_memberships WHERE user_id = ? AND group_id = ?',
-            [req.params.userId, req.params.groupId]
-        );
-        res.json(rows.length > 0 ? rows[0] : { status: 'NOT_MEMBER', is_blocked: false, is_deleted: false });
-    } catch (error) {
-        console.error('GET /api/group-membership error:', error);
         res.status(500).json({ error: error.message });
     }
 });
