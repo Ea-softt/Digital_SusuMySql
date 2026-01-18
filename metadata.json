@@ -1,0 +1,8 @@
+{
+  "name": "Copy of Digital Susu",
+  "description": "A modern Digital Susu (ROSCA) application for managing savings groups, contributions, and payouts effectively.",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera"
+  ]
+}
