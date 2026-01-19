@@ -70,9 +70,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentUser, onLogout,
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'chat', label: 'Group Chat', icon: MessageSquare },
-    { id: 'transactions', label: 'Transactions', icon: Wallet },
-    { id: 'profile', label: 'My Profile', icon: UserCog },
-    { id: 'help', label: 'Help Center', icon: HelpCircle }, // Added Help Center
+    { id: 'transactions', label: 'Platform Financials', icon: Wallet },
+    { id: currentUser.role === UserRole.SUPERUSER ? 'create-profile' : 'profile', label: currentUser.role === UserRole.SUPERUSER ? 'User Profile' : 'User Profile', icon: UserCog },
+    { id: currentUser.role === UserRole.SUPERUSER ? 'ai-help' : 'help', label: currentUser.role === UserRole.SUPERUSER ? 'AI Help Center' : 'Help', icon: HelpCircle },
     
     // Admin-only items
     ...(currentUser.role === UserRole.ADMIN ? [

@@ -10,6 +10,8 @@ import { GroupChat } from './components/GroupChat';
 import { TransactionHistory } from './components/TransactionHistory';
 import { JoinGroup } from './components/JoinGroup';
 import { HelpCenter } from './components/HelpCenter';
+import { CreateUserProfile } from './components/CreateUserProfile';
+import { AIHelpCenter } from './components/AIHelpCenter';
 import { User, UserRole, Group, Transaction } from './types';
 import { db } from './services/database';
 import { Lock, Mail, User as UserIcon, Wallet, Eye, EyeOff, CheckCircle, AlertCircle, Loader2, ArrowLeft, ShieldCheck, MapPin, Briefcase, FileText, Upload, Users, Crown, Camera, X, Phone, Smartphone, Star, Quote, Award, Copy, TrendingUp, Sparkles, MessageCircle, Database, Server, RefreshCw } from 'lucide-react';
@@ -251,26 +253,58 @@ const App: React.FC = () => {
 
   if (currentUser) {
     if (currentUser.role === UserRole.SUPERUSER) {
+        // Handle special views for superuser
+        if (currentView === 'create-profile') {
+            return (
+                <Layout currentUser={currentUser} onLogout={handleLogout} currentView={currentView} onNavigate={setCurrentView} isDarkMode={isDarkMode} toggleDarkMode={() => setIsDarkMode(!isDarkMode)}>
+                    <CreateUserProfile onSuccess={refreshData} onCancel={() => setCurrentView('dashboard')} />
+                </Layout>
+            );
+        }
+        
+        if (currentView === 'ai-help') {
+            return (
+                <Layout currentUser={currentUser} onLogout={handleLogout} currentView={currentView} onNavigate={setCurrentView} isDarkMode={isDarkMode} toggleDarkMode={() => setIsDarkMode(!isDarkMode)}>
+                    <AIHelpCenter />
+                </Layout>
+            );
+        }
+
+        // Map navigation views to SuperuserDashboard tabs
+        const tabMap: { [key: string]: 'overview' | 'users' | 'groups' | 'financials' | 'verification' | 'security' | 'chat' | 'settings' } = {
+            'dashboard': 'overview',
+            'chat': 'chat',
+            'transactions': 'financials',
+            'admin-mgmt': 'overview',
+        };
+        const initialTab = tabMap[currentView] || 'overview';
+
         return (
             <Layout currentUser={currentUser} onLogout={handleLogout} currentView={currentView} onNavigate={setCurrentView} isDarkMode={isDarkMode} toggleDarkMode={() => setIsDarkMode(!isDarkMode)}>
-                <SuperuserDashboard members={dbMembers} transactions={dbTransactions} groups={dbGroups} onRefresh={refreshData} currentUser={currentUser} />
+                <SuperuserDashboard members={dbMembers} transactions={dbTransactions} groups={dbGroups} onRefresh={refreshData} currentUser={currentUser} initialTab={initialTab} />
             </Layout>
         );
     }
 
     return (
       <Layout currentUser={contextUser || currentUser} onLogout={handleLogout} currentView={currentView} onNavigate={setCurrentView} isDarkMode={isDarkMode} toggleDarkMode={() => setIsDarkMode(!isDarkMode)} activeGroup={activeGroup} userGroups={userGroups} onSwitchGroup={handleGroupSwitch}>
-        {currentView === 'join-group' && <JoinGroup userId={currentUser.id} onSuccess={refreshData} onCancel={userGroups.length > 0 ? () => handleGroupSwitch(userGroups[0]) : undefined} />}
-        {currentView === 'help' && <HelpCenter />}
-        {activeGroup && contextUser && (
+        {/* Navigation Views */}
+        {currentView === 'dashboard' && activeGroup && contextUser && (
             <>
-                {currentView === 'dashboard' && contextUser.role === UserRole.MEMBER && <MemberDashboard group={activeGroup} transactions={dbTransactions} userId={currentUser.id} currentUser={contextUser} onRefresh={refreshData} members={dbMembers} />}
-                {((currentView === 'dashboard' && contextUser.role === UserRole.ADMIN) || currentView === 'members' || currentView === 'settings') && <AdminDashboard group={activeGroup} transactions={dbTransactions} members={dbMembers} currentUser={contextUser} onRefresh={refreshData} initialTab={currentView === 'dashboard' ? 'overview' : currentView} />}
+                {contextUser.role === UserRole.MEMBER && <MemberDashboard group={activeGroup} transactions={dbTransactions} userId={currentUser.id} currentUser={contextUser} onRefresh={refreshData} members={dbMembers} />}
+                {contextUser.role === UserRole.ADMIN && <AdminDashboard group={activeGroup} transactions={dbTransactions} members={dbMembers} currentUser={contextUser} onRefresh={refreshData} initialTab="overview" />}
             </>
         )}
+        {currentView === 'join-group' && <JoinGroup userId={currentUser.id} onSuccess={refreshData} onCancel={userGroups.length > 0 ? () => handleGroupSwitch(userGroups[0]) : undefined} />}
+        {currentView === 'help' && <HelpCenter />}
+        {currentView === 'ai-help' && <AIHelpCenter />}
         {currentView === 'chat' && activeGroup && <GroupChat currentUser={contextUser || currentUser} />}
         {currentView === 'profile' && <ProfileSettings user={currentUser} onUpdateProfile={(data) => db.updateUser(currentUser.id, data).then(refreshData)} />}
+        {currentView === 'create-profile' && <CreateUserProfile onSuccess={refreshData} onCancel={() => setCurrentView('dashboard')} />}
         {currentView === 'transactions' && activeGroup && <TransactionHistory transactions={dbTransactions} currency={activeGroup.currency} />}
+        {currentView === 'members' && activeGroup && contextUser?.role === UserRole.ADMIN && <AdminDashboard group={activeGroup} transactions={dbTransactions} members={dbMembers} currentUser={contextUser} onRefresh={refreshData} initialTab="members" />}
+        {currentView === 'settings' && activeGroup && contextUser?.role === UserRole.ADMIN && <AdminDashboard group={activeGroup} transactions={dbTransactions} members={dbMembers} currentUser={contextUser} onRefresh={refreshData} initialTab="settings" />}
+        {currentView === 'admin-mgmt' && contextUser?.role === UserRole.SUPERUSER && <SuperuserDashboard members={dbMembers} transactions={dbTransactions} groups={dbGroups} onRefresh={refreshData} currentUser={currentUser} />}
         <GeminiAdvisor />
       </Layout>
     );

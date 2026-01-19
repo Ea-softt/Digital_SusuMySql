@@ -19,6 +19,7 @@ interface SuperuserDashboardProps {
   groups: Group[]; 
   onRefresh: () => void;
   currentUser: User;
+  initialTab?: Tab;
 }
 
 // Define available tabs for the dashboard navigation
@@ -36,9 +37,9 @@ interface SecurityAlert {
     timestamp: number;
 }
 
-export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members, transactions, groups, onRefresh, currentUser }) => {
+export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members, transactions, groups, onRefresh, currentUser, initialTab = 'overview' }) => {
   // State for active tab navigation
-  const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   // State for search functionality
   const [searchTerm, setSearchTerm] = useState('');
   // State for logs
@@ -123,10 +124,19 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
     }
   });
 
+  // Help Center State
+  const [helpSearchQuery, setHelpSearchQuery] = useState('');
+  const [selectedFAQ, setSelectedFAQ] = useState<string | null>(null);
+
   // Ref for the hidden file input used in restore
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Ref for group icon upload
   const groupIconInputRef = useRef<HTMLInputElement>(null);
+
+  // Update activeTab when initialTab prop changes (from sidebar navigation)
+  useEffect(() => {
+      setActiveTab(initialTab);
+  }, [initialTab]);
 
   // Sync logs and config from DB
   useEffect(() => {
@@ -2389,6 +2399,186 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
       );
   };
 
+  // Render My Profile Page
+  const renderMyProfile = () => {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        {/* User Profile Card */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+          <div className="h-32 bg-gradient-to-r from-primary-500 to-purple-600 relative"></div>
+          <div className="px-6 pb-6">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 -mt-16 relative z-10">
+              <div className="flex items-end gap-4">
+                <img src={currentUser.avatar} alt="" className="w-32 h-32 rounded-full border-4 border-white dark:border-gray-800 shadow-lg" />
+                <div className="mb-2">
+                  <h2 className="text-3xl font-bold text-gray-900 dark:text-white">{currentUser.name}</h2>
+                  <p className="text-gray-500 dark:text-gray-400">{currentUser.role}</p>
+                </div>
+              </div>
+              <button className="px-6 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-bold shadow-md">
+                Edit Profile
+              </button>
+            </div>
+
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-100 dark:border-gray-600">
+                <p className="text-xs text-gray-500 dark:text-gray-400 font-bold uppercase mb-1">Email</p>
+                <p className="text-sm font-medium text-gray-900 dark:text-white">{currentUser.email}</p>
+              </div>
+              <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-100 dark:border-gray-600">
+                <p className="text-xs text-gray-500 dark:text-gray-400 font-bold uppercase mb-1">Phone</p>
+                <p className="text-sm font-medium text-gray-900 dark:text-white">{currentUser.phoneNumber || 'N/A'}</p>
+              </div>
+              <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-100 dark:border-gray-600">
+                <p className="text-xs text-gray-500 dark:text-gray-400 font-bold uppercase mb-1">Location</p>
+                <p className="text-sm font-medium text-gray-900 dark:text-white">{currentUser.location || 'N/A'}</p>
+              </div>
+              <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-100 dark:border-gray-600">
+                <p className="text-xs text-gray-500 dark:text-gray-400 font-bold uppercase mb-1">Join Date</p>
+                <p className="text-sm font-medium text-gray-900 dark:text-white">{currentUser.joinDate}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Profile Details */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+            <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <Shield className="w-5 h-5 text-primary-600" /> Security Settings
+            </h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-100 dark:border-gray-600">
+                <span className="text-sm font-medium text-gray-900 dark:text-white">Two-Factor Authentication</span>
+                <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-bold rounded-full">Enabled</span>
+              </div>
+              <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-100 dark:border-gray-600">
+                <span className="text-sm font-medium text-gray-900 dark:text-white">Password Last Changed</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">30 days ago</span>
+              </div>
+              <button className="w-full py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-50 dark:hover:bg-gray-700">
+                Change Password
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+            <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <Activity className="w-5 h-5 text-primary-600" /> Account Activity
+            </h3>
+            <div className="space-y-3">
+              <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-100 dark:border-gray-600">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Last Login</p>
+                <p className="text-sm font-medium text-gray-900 dark:text-white">Today at 2:30 PM</p>
+              </div>
+              <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-100 dark:border-gray-600">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Active Sessions</p>
+                <p className="text-sm font-medium text-gray-900 dark:text-white">2 sessions</p>
+              </div>
+              <button className="w-full py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-50 dark:hover:bg-gray-700 text-sm">
+                View All Activity
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Render Help Center / AI Help
+  const renderHelpCenter = () => {
+    const faqs = [
+      {
+        id: 'faq-1',
+        question: 'How do I manage user accounts?',
+        answer: 'Navigate to Members section to view, edit, or manage user accounts. You can suspend, reactivate, or delete users as needed.'
+      },
+      {
+        id: 'faq-2',
+        question: 'How to create a new group?',
+        answer: 'Go to Group Settings and click "Create New Group". Fill in group details, contribution amount, and frequency. Members can then join using the invite code.'
+      },
+      {
+        id: 'faq-3',
+        question: 'How do I monitor security threats?',
+        answer: 'Check Admin Management > Help Center for real-time threat detection. System monitors login patterns, device changes, and unusual transactions.'
+      },
+      {
+        id: 'faq-4',
+        question: 'How to backup the database?',
+        answer: 'In System Settings, click "Create Backup" to generate a JSON backup. You can download it or restore from a previous backup anytime.'
+      },
+      {
+        id: 'faq-5',
+        question: 'How do I verify user KYC?',
+        answer: 'Go to My Profile section to review pending KYC applications. AI analyzes documents and suggests approval or rejection based on match score.'
+      }
+    ];
+
+    const filteredFAQs = faqs.filter(faq =>
+      faq.question.toLowerCase().includes(helpSearchQuery.toLowerCase()) ||
+      faq.answer.toLowerCase().includes(helpSearchQuery.toLowerCase())
+    );
+
+    return (
+      <div className="space-y-6 animate-fade-in">
+        {/* AI Help Header */}
+        <div className="bg-gradient-to-r from-primary-500 to-purple-600 rounded-xl shadow-lg p-8 text-white">
+          <h2 className="text-3xl font-bold mb-2">Help Center & AI Assistant</h2>
+          <p className="text-primary-100">Get instant answers to your questions about managing the digital-susu platform</p>
+        </div>
+
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search help articles..."
+            value={helpSearchQuery}
+            onChange={(e) => setHelpSearchQuery(e.target.value)}
+            className="w-full pl-12 pr-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none dark:text-white"
+          />
+        </div>
+
+        {/* FAQs */}
+        <div className="grid gap-4">
+          <h3 className="font-bold text-lg text-gray-900 dark:text-white">Frequently Asked Questions</h3>
+          {filteredFAQs.length > 0 ? (
+            filteredFAQs.map(faq => (
+              <div key={faq.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
+                <button
+                  onClick={() => setSelectedFAQ(selectedFAQ === faq.id ? null : faq.id)}
+                  className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                >
+                  <h4 className="text-left font-bold text-gray-900 dark:text-white">{faq.question}</h4>
+                  <ChevronRight className={`w-5 h-5 text-gray-400 transition-transform ${selectedFAQ === faq.id ? 'rotate-90' : ''}`} />
+                </button>
+                {selectedFAQ === faq.id && (
+                  <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700/30 border-t border-gray-100 dark:border-gray-700 text-gray-600 dark:text-gray-300">
+                    {faq.answer}
+                  </div>
+                )}
+              </div>
+            ))
+          ) : (
+            <div className="text-center py-8 text-gray-500">No matching help articles found</div>
+          )}
+        </div>
+
+        {/* Support Contact */}
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-900/50 p-6">
+          <h3 className="font-bold text-lg text-blue-900 dark:text-blue-200 mb-2">Need More Help?</h3>
+          <p className="text-blue-800 dark:text-blue-300 mb-4">
+            Contact our support team for detailed assistance with platform administration and account management.
+          </p>
+          <button className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold">
+            Contact Support
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   const renderInviteModal = () => {
     if (!isInviteModalOpen) return null;
     return (
@@ -2422,7 +2612,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
       {/* Tab Navigation */}
       <div className="flex overflow-x-auto pb-2 border-b border-gray-200 dark:border-gray-700 gap-6">
         {[
-            { id: 'overview', label: 'System Overview', icon: Activity },
+            { id: 'overview', label: 'Dashboard', icon: Activity },
             { id: 'users', label: 'User Management', icon: Users },
             { id: 'groups', label: 'Groups', icon: Database },
             { id: 'chat', label: 'Group Chat', icon: MessageSquare },
