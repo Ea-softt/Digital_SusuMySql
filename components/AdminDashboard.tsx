@@ -6,6 +6,7 @@ import { Users, Shield, Activity, DollarSign, Search, AlertTriangle, CheckCircle
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid, Legend, PieChart, Pie, Cell } from 'recharts';
 import { db } from '../services/database';
 import { GroupChat } from './GroupChat';
+import { AIHelpCenter } from './AIHelpCenter';
 import { moneyFormatter } from '../utils/formatters';
 import { processGhanaMobileMoneyPayment, validateMobileMoneyTransaction, normalizePhoneNumber, getAvailableProviders } from '../services/ghanaMoneyService';
 // reverted: use DollarSign from lucide-react instead of custom CediSign
@@ -61,6 +62,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawPassword, setWithdrawPassword] = useState('');
+
+  // --- Help Center State ---
+  const [isHelpCenterOpen, setIsHelpCenterOpen] = useState(false);
 
   // --- Invite Member State ---
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -253,6 +257,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
       }
   };
 
+  const copyLink = () => {
+    navigator.clipboard.writeText(`https://digitalsusu.app/join/${group.inviteCode}`);
+    alert("Group invite link copied to clipboard!");
+  };
+
   // --- RENDERERS ---
 
   const renderOverview = () => {
@@ -436,6 +445,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
 
   return (
     <div className="space-y-6">
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h2 className="text-xl font-bold text-gray-800 dark:text-white">{group.name}</h2>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">Administrator Dashboard</p>
+            </div>
+            
+            <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-700 p-2 rounded-lg border border-gray-200 dark:border-gray-600 w-full sm:w-auto">
+                    <span className="text-xs text-gray-500 dark:text-gray-400 px-2">Invite Code:</span>
+                    <code className="font-mono text-sm font-bold text-primary-700 dark:text-primary-400">
+                        {group.inviteCode}
+                    </code>
+                    <button onClick={copyLink} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors" title="Copy Invite Link">
+                        <Copy className="w-4 h-4 text-gray-500 dark:text-gray-300" />
+                    </button>
+                </div>
+                <button 
+                    onClick={() => setIsHelpCenterOpen(true)}
+                    className="p-2.5 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                    title="Chat with Support"
+                >
+                    <MessageSquare className="w-5 h-5" />
+                </button>
+            </div>
+        </div>
         <div className="flex overflow-x-auto pb-2 border-b border-gray-200 dark:border-gray-700 gap-6">
             {[
                 { id: 'overview', label: 'Overview', icon: Activity },
@@ -462,6 +496,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
             {activeTab === 'settings' && renderSettings()}
             {activeTab === 'payouts' && ( <div className="p-12 text-center text-gray-500">Payout logic uses MySQL PayoutSchedule table. Triggering now...</div> )}
         </div>
+
+        {/* --- Modals --- */}
+        
+        {isHelpCenterOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+                <div className="bg-gray-50 dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700">
+                    <div className="flex-shrink-0 p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-white dark:bg-gray-800">
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                            <BrainCircuit className="w-6 h-6 text-primary-600"/>
+                            AI Assistant & Help Center
+                        </h3>
+                        <button onClick={() => setIsHelpCenterOpen(false)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+                            <X className="w-5 h-5 text-gray-500"/>
+                        </button>
+                    </div>
+                    <div className="flex-grow overflow-y-auto p-6">
+                        <AIHelpCenter />
+                    </div>
+                </div>
+            </div>
+        )}
 
         {/* Common Modals */}
         {isInviteModalOpen && (

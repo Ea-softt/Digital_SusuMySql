@@ -37,6 +37,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentUser, onLogout,
   const notificationRef = useRef<HTMLDivElement>(null);
   const groupDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Filter groups to only show those where the user is an active member
+  const activeUserGroups = userGroups.filter(group => {
+    // Find the membership for this specific group
+    const membership = currentUser.memberships?.find(m => m.groupId === group.id);
+    // Only include the group if the membership exists and the status is 'ACTIVE'
+    return membership && membership.status === 'ACTIVE';
+  });
+
   // Initialize notifications based on user role
   useEffect(() => {
     const userNotifs = MOCK_NOTIFICATIONS.filter(n => 
@@ -173,13 +181,13 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentUser, onLogout,
                        <div className="absolute top-full left-0 w-full mt-2 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden z-50 text-gray-900 dark:text-white animate-fade-in-up">
                            <div className="py-2">
                                <p className="px-4 py-2 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Your Groups</p>
-                               {userGroups.map(group => (
+                               {activeUserGroups.map(group => (
                                    <button 
                                         key={group.id}
                                         onClick={() => {
                                             if (onSwitchGroup) onSwitchGroup(group);
                                             setIsGroupDropdownOpen(false);
-                                        }}
+                                        }} 
                                         className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center justify-between ${activeGroup?.id === group.id ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400 font-bold' : ''}`}
                                    >
                                        <span className="truncate">{group.name}</span>

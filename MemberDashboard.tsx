@@ -1,10 +1,12 @@
-
 import React, { useState, useEffect } from 'react';
 import { Group, Transaction, User } from '../types';
 import { StatsCard } from './StatsCard';
-import { Wallet, Calendar, PiggyBank, History, Search, ArrowRight, CheckCircle, Clock, ShieldAlert, UserCheck, LayoutDashboard, Users, DollarSign, Smartphone, Loader2, Lock, Copy, AlertTriangle, X } from 'lucide-react';
+import { Wallet, Calendar, PiggyBank, History, Search, ArrowRight, CheckCircle, Clock, ShieldAlert, UserCheck, LayoutDashboard, Users, DollarSign, Smartphone, Loader2, Lock, Copy, AlertTriangle, X, Shield } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { db } from '../services/database';
+import { moneyFormatter } from '../utils/formatters';
+import { processGhanaMobileMoneyPayment, validateMobileMoneyTransaction, normalizePhoneNumber } from '../services/ghanaMoneyService';
+// reverted CediSign usage: using DollarSign from lucide-react
 
 interface MemberDashboardProps {
   group: Group;
@@ -57,40 +59,49 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
 
   const walletBalance = totalPayoutsReceived + totalDeposits - totalWithdrawals;
 
-  // Handlers
-  const handleJoinGroup = (e: React.FormEvent) => {
+  // --- ASYNC HANDLERS FOR MYSQL ---
+
+  const handleJoinGroup = async (e: React.FormEvent) => {
     e.preventDefault();
     setJoinError('');
     setIsJoining(true);
 
-    setTimeout(async () => {
-        // MySQL database connection may be needed here
-        // Details: Trigger API call (POST /api/groups/join). Backend executes: INSERT INTO user_groups (user_id, group_id, status) VALUES (?, ?, 'PENDING');
+    try {
         const result = await db.joinGroupRequest(userId, joinCode);
         if (result.success) {
             if (onRefresh) onRefresh();
+            alert("Request sent successfully! Wait for leader approval.");
         } else {
             setJoinError(result.message);
         }
+    } catch (err) {
+        setJoinError("Connection to API failed.");
+    } finally {
         setIsJoining(false);
-    }, 1000);
+    }
   };
 
-  const handleAcceptInvite = () => {
+  const handleAcceptInvite = async () => {
       setIsJoining(true);
-      setTimeout(() => {
-          db.updateUser(userId, { status: 'ACTIVE' });
+      try {
+          await db.updateUser(userId, { status: 'ACTIVE' });
           if (onRefresh) onRefresh();
+      } catch (err) {
+          console.error("Failed to accept invite", err);
+      } finally {
           setIsJoining(false);
-      }, 1000);
+      }
   };
 
-  const handlePayContribution = () => {
+  const handlePayContribution = async () => {
+      if (walletBalance < group.contributionAmount) {
+          alert(`Insufficient wallet balance. Please load ${group.currency} ${group.contributionAmount - walletBalance} first.`);
+          setWalletModalOpen(true);
+          return;
+      }
+
       setIsContributing(true);
-      setTimeout(() => {
-          // MySQL database connection may be needed here
-          // Details: Trigger API call (POST /api/transactions/contribute). Backend executes Transaction: 1. INSERT INTO transactions (type='CONTRIBUTION', ...); 2. UPDATE groups SET total_pool = total_pool + amount;
-          
+      try {
           const newTx: Transaction = {
               id: `tx-c-${Date.now()}`,
               userId: currentUser.id,
@@ -100,41 +111,83 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
               date: new Date().toISOString().split('T')[0],
               status: 'COMPLETED'
           };
-          db.addTransaction(newTx);
+          await db.addTransaction(newTx);
           if (onRefresh) onRefresh();
-          setIsContributing(false);
           alert(`Successfully contributed ${group.currency} ${group.contributionAmount}!`);
-      }, 1500);
+      } catch (err) {
+          alert("Payment failed. Please try again.");
+      } finally {
+          setIsContributing(false);
+      }
   };
 
-  const handleLoadWallet = () => {
-       if (!momoDetails.amount) return;
+  const handleLoadWallet = async () => {
+       if (!momoDetails.amount) {
+           alert('Please enter an amount.');
+           return;
+       }
+
+       if (!currentUser.phoneNumber) {
+           alert('Please add a phone number to your profile first.');
+           return;
+       }
+
        setIsProcessingWallet(true);
        
-       setTimeout(() => {
+       try {
            const amount = Number(momoDetails.amount);
-           // MySQL database connection may be needed here
-           // Details: Trigger API call (POST /api/wallet/load). Backend executes: INSERT INTO transactions (type='DEPOSIT', ...);
-           
+           const phoneNumber = currentUser.phoneNumber;
+
+           // Validate the mobile money transaction
+           const validation = validateMobileMoneyTransaction(
+               momoDetails.provider as any,
+               phoneNumber,
+               amount
+           );
+
+           if (!validation.valid) {
+               alert(`Validation failed:\n${validation.errors.join('\n')}`);
+               setIsProcessingWallet(false);
+               return;
+           }
+
+           // Process Ghana Mobile Money Payment
+           const paymentResult = await processGhanaMobileMoneyPayment(
+               momoDetails.provider as any,
+               phoneNumber,
+               amount,
+               group.currency
+           );
+
+           if (!paymentResult.success) {
+               alert(`Payment Failed: ${paymentResult.error || paymentResult.message}`);
+               setIsProcessingWallet(false);
+               return;
+           }
+
+           // Create transaction record
            const newTx: Transaction = {
-                id: `tx-d-${Date.now()}`,
+                id: paymentResult.transactionId || `tx-d-${Date.now()}`,
                 userId: currentUser.id,
                 userName: currentUser.name,
                 type: 'DEPOSIT',
                 amount: amount,
                 date: new Date().toISOString().split('T')[0],
-                status: 'COMPLETED'
+                status: 'PENDING' // Mobile Money transactions are initially pending
            };
-           db.addTransaction(newTx);
+           await db.addTransaction(newTx);
            if (onRefresh) onRefresh();
-           setIsProcessingWallet(false);
            setWalletModalOpen(false);
            setMomoDetails(prev => ({...prev, amount: ''}));
-           alert(`Successfully loaded ${group.currency} ${amount} to your wallet.`);
-       }, 2000);
+           alert(`Payment Initiated!\n\n${paymentResult.message}\n\nTransaction ID: ${paymentResult.transactionId}`);
+       } catch (err) {
+           alert(`Failed to load wallet: ${err instanceof Error ? err.message : 'Unknown error'}`);
+       } finally {
+           setIsProcessingWallet(false);
+       }
   };
 
-  const handleWithdraw = (e: React.FormEvent) => {
+  const handleWithdraw = async (e: React.FormEvent) => {
       e.preventDefault();
       const amount = Number(withdrawAmount);
       
@@ -152,10 +205,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
       }
 
       setIsProcessingWithdraw(true);
-      setTimeout(() => {
-          // MySQL database connection may be needed here
-          // Details: Trigger API call (POST /api/wallet/withdraw). Backend verifies balance and executes: INSERT INTO transactions (type='WITHDRAWAL', ...);
-          
+      try {
           const newTx: Transaction = {
               id: `tx-w-${Date.now()}`,
               userId: currentUser.id,
@@ -165,13 +215,16 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
               date: new Date().toISOString().split('T')[0],
               status: 'COMPLETED'
           };
-          db.addTransaction(newTx);
+          await db.addTransaction(newTx);
           setWithdrawAmount('');
           setWithdrawPassword('');
-          setIsProcessingWithdraw(false);
           if (onRefresh) onRefresh();
           alert(`Successfully withdrew ${group.currency} ${amount} to your Mobile Money wallet.`);
-      }, 2000);
+      } catch (err) {
+          alert("Withdrawal failed.");
+      } finally {
+          setIsProcessingWithdraw(false);
+      }
   };
 
   const copyLink = () => {
@@ -179,9 +232,44 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
     alert("Group invite link copied to clipboard!");
   };
 
-  // --- EARLY RETURNS FOR STATUS ---
+  // --- EARLY RETURNS FOR VERIFICATION STATUS ---
 
-  // VIEW: STATUS 'NEW'
+  if (currentUser.verificationStatus !== 'VERIFIED') {
+      return (
+          <div className="max-w-md mx-auto mt-10 text-center animate-fade-in">
+              <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-xl border border-purple-100 dark:border-gray-700 overflow-hidden">
+                  <div className="bg-purple-600 p-10 flex justify-center">
+                      <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-md">
+                          <Shield className="w-10 h-10 text-white animate-pulse" />
+                      </div>
+                  </div>
+                  <div className="p-8">
+                      <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Verification in Progress</h2>
+                      <p className="text-gray-500 dark:text-gray-400 mb-6 leading-relaxed">
+                          Your identity documents are being reviewed by the Digital Susu administrators. 
+                          For security and compliance, all members must be verified before they can join groups or handle transactions.
+                      </p>
+                      <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-100 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-sm flex items-start gap-3 text-left">
+                          <CheckCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-bold">What's Next?</p>
+                            <p className="mt-1">You will receive a notification once your KYC is approved. This usually takes 1-2 business days.</p>
+                          </div>
+                      </div>
+                      <button 
+                         onClick={() => onRefresh && onRefresh()}
+                         className="mt-8 w-full py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-white rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex items-center justify-center gap-2"
+                      >
+                         <History className="w-4 h-4" /> Check Again
+                      </button>
+                  </div>
+              </div>
+          </div>
+      );
+  }
+
+  // --- EARLY RETURNS FOR GROUP STATUS ---
+
   if (currentUser.status === 'NEW') {
       return (
           <div className="max-w-md mx-auto mt-10">
@@ -228,7 +316,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
       );
   }
 
-  // VIEW: STATUS 'PENDING'
   if (currentUser.status === 'PENDING') {
       return (
           <div className="max-w-md mx-auto mt-10 text-center">
@@ -246,7 +333,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
       );
   }
 
-  // VIEW: STATUS 'INVITED'
   if (currentUser.status === 'INVITED') {
       return (
           <div className="max-w-md mx-auto mt-10">
@@ -279,8 +365,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
       );
   }
 
-  // --- RENDER TABS CONTENT ---
-
   const renderOverview = () => {
     const chartData = [
         { name: 'Jan', amount: 500 },
@@ -296,7 +380,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <StatsCard
             title="Total Contributed"
-            value={`${group.currency} ${totalContributed.toLocaleString()}`}
+            value={moneyFormatter(totalContributed, group.currency)}
             icon={PiggyBank}
             color="bg-primary-600"
             />
@@ -310,7 +394,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
             />
             <StatsCard
             title="My Wallet Balance"
-            value={`${group.currency} ${walletBalance.toLocaleString()}`}
+            value={moneyFormatter(walletBalance, group.currency)}
             icon={Wallet}
             color="bg-purple-600"
             />
@@ -353,7 +437,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                     <Wallet className="w-8 h-8 text-primary-600 dark:text-primary-400" />
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Next Contribution</h3>
-                <p className="text-gray-500 dark:text-gray-400 mb-6">Your next payment of <span className="font-bold text-gray-900 dark:text-white">{group.currency} {group.contributionAmount}</span> is due on June 1st.</p>
+                <p className="text-gray-500 dark:text-gray-400 mb-6">Your next payment of <span className="font-bold text-gray-900 dark:text-white">{group.currency} {group.contributionAmount}</span> is due soon.</p>
                 <button 
                     onClick={handlePayContribution}
                     disabled={isContributing}
@@ -480,7 +564,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                             <tr key={t.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                                 <td className="px-6 py-4 font-mono text-gray-500 dark:text-gray-400">#{t.id.toUpperCase()}</td>
                                 <td className="px-6 py-4">
-                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${ 
                                         t.type === 'CONTRIBUTION' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' : 
                                         t.type === 'PAYOUT' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
                                         t.type === 'DEPOSIT' ? 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300' :
@@ -494,11 +578,11 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                                     {(t.type === 'PAYOUT' || t.type === 'DEPOSIT') ? '+' : '-'}{group.currency} {t.amount}
                                 </td>
                                 <td className="px-6 py-4">
-                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${ 
                                         t.status === 'COMPLETED' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' : 
                                         t.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
                                     }`}>
-                                        <span className={`w-1.5 h-1.5 rounded-full ${
+                                        <span className={`w-1.5 h-1.5 rounded-full ${ 
                                             t.status === 'COMPLETED' ? 'bg-green-500' : 
                                             t.status === 'PENDING' ? 'bg-yellow-500' : 'bg-red-500'
                                         }`}></span>
@@ -523,19 +607,19 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
           <div className="space-y-6">
             <div className="bg-gradient-to-br from-purple-900 to-indigo-900 rounded-xl p-6 text-white shadow-lg">
                 <p className="text-purple-200 text-sm font-medium mb-1">Available to Withdraw</p>
-                <h2 className="text-4xl font-bold mb-4">{group.currency} {walletBalance.toLocaleString()}</h2>
+                <h2 className="text-4xl font-bold mb-4">{moneyFormatter(walletBalance, group.currency)}</h2>
                 <div className="flex gap-4 text-xs text-purple-200">
                     <div>
                         <span className="block opacity-70">Payouts</span>
-                        <span className="font-bold text-white">{group.currency} {totalPayoutsReceived}</span>
+                        <span className="font-bold text-white">GHS {totalPayoutsReceived}</span>
                     </div>
                     <div>
                         <span className="block opacity-70">Deposits</span>
-                        <span className="font-bold text-white">{group.currency} {totalDeposits}</span>
+                        <span className="font-bold text-white">GHS {totalDeposits}</span>
                     </div>
                     <div>
                         <span className="block opacity-70">Withdrawn</span>
-                        <span className="font-bold text-white">{group.currency} {totalWithdrawals}</span>
+                        <span className="font-bold text-white">GHS {totalWithdrawals}</span>
                     </div>
                 </div>
             </div>
@@ -647,7 +731,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                                 </div>
                              </div>
                              <div className="text-right font-bold text-gray-900 dark:text-white">
-                                {group.currency} {group.totalPool.toLocaleString()}
+                                {moneyFormatter(group.totalPool, group.currency)}
                              </div>
                         </div>
                     );
@@ -692,20 +776,14 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                   </div>
 
                   <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mobile Money Number</label>
-                      <div className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white font-mono flex items-center justify-between">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Registered Mobile Money Number</label>
+                      <div className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700/50 text-gray-900 dark:text-white font-mono flex items-center justify-between">
                           <span className="flex items-center gap-2">
                               <Smartphone className="w-4 h-4 text-gray-500" />
-                              {currentUser.phoneNumber || 'N/A'} 
+                              {normalizePhoneNumber(currentUser.phoneNumber || 'Not set')} 
                           </span>
-                          <span className="text-[10px] font-bold uppercase text-gray-400 border border-gray-200 dark:border-gray-600 px-2 py-0.5 rounded">Registered</span>
+                          <span className="text-[10px] font-bold uppercase text-gray-400 border border-gray-200 dark:border-gray-600 px-2 py-0.5 rounded">Verified</span>
                       </div>
-                      {!currentUser.phoneNumber && (
-                           <p className="text-xs text-red-500 mt-1">Please add a phone number in your profile settings to proceed.</p>
-                      )}
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                          Funds will be deducted from your registered mobile number.
-                      </p>
                   </div>
 
                   <div>
@@ -726,11 +804,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                           placeholder="0.00"
                           className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
                       />
-                  </div>
-                  
-                  <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg border border-yellow-100 dark:border-yellow-900/50 text-xs text-yellow-800 dark:text-yellow-400 flex items-start gap-2">
-                      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                      <p>You will receive a USSD prompt on your phone ({currentUser.phoneNumber}) to confirm the transaction.</p>
                   </div>
               </div>
 
@@ -753,7 +826,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
     <div className="space-y-6">
         {/* Navigation Tabs */}
         <div className="flex overflow-x-auto pb-2 border-b border-gray-200 dark:border-gray-700 gap-6">
-            {[
+            {[ 
                 { id: 'overview', label: 'Overview', icon: LayoutDashboard },
                 { id: 'members', label: 'Members', icon: Users },
                 { id: 'transactions', label: 'Transactions', icon: DollarSign },

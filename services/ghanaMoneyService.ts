@@ -3,7 +3,7 @@
  * Handles wallet loading via MTN, Vodafone, and AirtelTigo in Ghana
  */
 
-export type MobileMoneyProvider = 'MTN' | 'Vodafone' | 'AirtelTigo';
+export type MobileMoneyProvider = 'MTN' | 'Vodafone' | 'AirtelTigo' | 'Telecel' | 'AT';
 
 export interface MobileMoneyPayment {
   provider: MobileMoneyProvider;
@@ -31,13 +31,27 @@ const PROVIDERS = {
     shortCode: '170',
     description: 'MTN Money Transfer Service',
   },
-  Vodafone: {
+  Telecel: {
+    name: 'Telecel Cash',
+    ussdCode: '*110#',
+    shortCode: '110',
+    description: 'Telecel Cash Service',
+    aliases: ['Vodafone'],
+  },
+  AT: {
+    name: 'AT Money',
+    ussdCode: '*110#',
+    shortCode: '110',
+    description: 'AT Money Service',
+    aliases: ['AirtelTigo'],
+  },
+  Vodafone: { // Kept for backward compatibility
     name: 'Vodafone Cash',
     ussdCode: '*110#',
     shortCode: '110',
     description: 'Vodafone Cash Service',
   },
-  AirtelTigo: {
+  AirtelTigo: { // Kept for backward compatibility
     name: 'AirtelTigo Money',
     ussdCode: '*110#',
     shortCode: '110',
