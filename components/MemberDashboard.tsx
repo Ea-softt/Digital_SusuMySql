@@ -5,6 +5,9 @@ import { StatsCard } from './StatsCard';
 import { Wallet, Calendar, PiggyBank, History, Search, ArrowRight, CheckCircle, Clock, ShieldAlert, UserCheck, LayoutDashboard, Users, DollarSign, Smartphone, Loader2, Lock, Copy, AlertTriangle, X, Shield } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { db } from '../services/database';
+import { moneyFormatter } from '../utils/formatters';
+import { processGhanaMobileMoneyPayment, validateMobileMoneyTransaction, normalizePhoneNumber } from '../services/ghanaMoneyService';
+// reverted CediSign usage: using DollarSign from lucide-react
 
 interface MemberDashboardProps {
   group: Group;
@@ -120,27 +123,66 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
   };
 
   const handleLoadWallet = async () => {
-       if (!momoDetails.amount) return;
+       if (!momoDetails.amount) {
+           alert('Please enter an amount.');
+           return;
+       }
+
+       if (!currentUser.phoneNumber) {
+           alert('Please add a phone number to your profile first.');
+           return;
+       }
+
        setIsProcessingWallet(true);
        
        try {
            const amount = Number(momoDetails.amount);
+           const phoneNumber = currentUser.phoneNumber;
+
+           // Validate the mobile money transaction
+           const validation = validateMobileMoneyTransaction(
+               momoDetails.provider as any,
+               phoneNumber,
+               amount
+           );
+
+           if (!validation.valid) {
+               alert(`Validation failed:\n${validation.errors.join('\n')}`);
+               setIsProcessingWallet(false);
+               return;
+           }
+
+           // Process Ghana Mobile Money Payment
+           const paymentResult = await processGhanaMobileMoneyPayment(
+               momoDetails.provider as any,
+               phoneNumber,
+               amount,
+               group.currency
+           );
+
+           if (!paymentResult.success) {
+               alert(`Payment Failed: ${paymentResult.error || paymentResult.message}`);
+               setIsProcessingWallet(false);
+               return;
+           }
+
+           // Create transaction record
            const newTx: Transaction = {
-                id: `tx-d-${Date.now()}`,
+                id: paymentResult.transactionId || `tx-d-${Date.now()}`,
                 userId: currentUser.id,
                 userName: currentUser.name,
                 type: 'DEPOSIT',
                 amount: amount,
                 date: new Date().toISOString().split('T')[0],
-                status: 'COMPLETED'
+                status: 'PENDING' // Mobile Money transactions are initially pending
            };
            await db.addTransaction(newTx);
            if (onRefresh) onRefresh();
            setWalletModalOpen(false);
            setMomoDetails(prev => ({...prev, amount: ''}));
-           alert(`Successfully loaded ${group.currency} ${amount} to your wallet.`);
+           alert(`Payment Initiated!\n\n${paymentResult.message}\n\nTransaction ID: ${paymentResult.transactionId}`);
        } catch (err) {
-           alert("Failed to load wallet.");
+           alert(`Failed to load wallet: ${err instanceof Error ? err.message : 'Unknown error'}`);
        } finally {
            setIsProcessingWallet(false);
        }
@@ -339,7 +381,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <StatsCard
             title="Total Contributed"
-            value={`${group.currency} ${totalContributed.toLocaleString()}`}
+            value={moneyFormatter(totalContributed, group.currency)}
             icon={PiggyBank}
             color="bg-primary-600"
             />
@@ -353,7 +395,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
             />
             <StatsCard
             title="My Wallet Balance"
-            value={`${group.currency} ${walletBalance.toLocaleString()}`}
+            value={moneyFormatter(walletBalance, group.currency)}
             icon={Wallet}
             color="bg-purple-600"
             />
@@ -566,7 +608,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
           <div className="space-y-6">
             <div className="bg-gradient-to-br from-purple-900 to-indigo-900 rounded-xl p-6 text-white shadow-lg">
                 <p className="text-purple-200 text-sm font-medium mb-1">Available to Withdraw</p>
-                <h2 className="text-4xl font-bold mb-4">{group.currency} {walletBalance.toLocaleString()}</h2>
+                <h2 className="text-4xl font-bold mb-4">{moneyFormatter(walletBalance, group.currency)}</h2>
                 <div className="flex gap-4 text-xs text-purple-200">
                     <div>
                         <span className="block opacity-70">Payouts</span>
@@ -690,7 +732,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                                 </div>
                              </div>
                              <div className="text-right font-bold text-gray-900 dark:text-white">
-                                {group.currency} {group.totalPool.toLocaleString()}
+                                {moneyFormatter(group.totalPool, group.currency)}
                              </div>
                         </div>
                     );
@@ -735,18 +777,27 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                   </div>
 
                   <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mobile Money Number</label>
-                      <div className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white font-mono flex items-center justify-between">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Registered Mobile Money Number</label>
+                      <div className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700/50 text-gray-900 dark:text-white font-mono flex items-center justify-between">
                           <span className="flex items-center gap-2">
                               <Smartphone className="w-4 h-4 text-gray-500" />
-                              {currentUser.phoneNumber || 'N/A'} 
+                              {normalizePhoneNumber(currentUser.phoneNumber || 'Not set')} 
                           </span>
-                          <span className="text-[10px] font-bold uppercase text-gray-400 border border-gray-200 dark:border-gray-600 px-2 py-0.5 rounded">Registered</span>
+                          <span className="text-[10px] font-bold uppercase text-gray-400 border border-gray-200 dark:border-gray-600 px-2 py-0.5 rounded">Verified</span>
                       </div>
                   </div>
 
                   <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount ({group.currency})</label>
+                      <div className="flex items-center justify-between">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount ({group.currency})</label>
+                          <button
+                              type="button"
+                              onClick={() => setMomoDetails(prev => ({ ...prev, amount: String(group.contributionAmount) }))}
+                              className="text-sm text-primary-600 hover:underline"
+                          >
+                              Use contribution: {moneyFormatter(group.contributionAmount, group.currency)}
+                          </button>
+                      </div>
                       <input 
                           type="number" 
                           value={momoDetails.amount}

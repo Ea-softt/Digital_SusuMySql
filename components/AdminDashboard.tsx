@@ -6,6 +6,9 @@ import { Users, Shield, Activity, DollarSign, Search, AlertTriangle, CheckCircle
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid, Legend, PieChart, Pie, Cell } from 'recharts';
 import { db } from '../services/database';
 import { GroupChat } from './GroupChat';
+import { moneyFormatter } from '../utils/formatters';
+import { processGhanaMobileMoneyPayment, validateMobileMoneyTransaction, normalizePhoneNumber, getAvailableProviders } from '../services/ghanaMoneyService';
+// reverted: use DollarSign from lucide-react instead of custom CediSign
 
 interface AdminDashboardProps {
   group: Group;
@@ -53,7 +56,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
 
   const [walletBalance, setWalletBalance] = useState(0);
   const [walletModalOpen, setWalletModalOpen] = useState(false);
-  const [momoDetails, setMomoDetails] = useState({ provider: 'MTN', number: '', amount: '' });
+  const [momoDetails, setMomoDetails] = useState({ provider: 'MTN', number: currentUser.phoneNumber || '', amount: '' });
   const [isProcessingWallet, setIsProcessingWallet] = useState(false);
   
   const [withdrawAmount, setWithdrawAmount] = useState('');
@@ -160,26 +163,67 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   };
 
   const handleLoadWallet = async () => {
-      if (!momoDetails.amount) return;
+      if (!momoDetails.amount) {
+          alert('Please enter an amount.');
+          return;
+      }
+
+      if (!currentUser.phoneNumber) {
+          alert('Please add a phone number to your profile first.');
+          return;
+      }
+
       setIsProcessingWallet(true);
       try {
           const amount = Number(momoDetails.amount);
+          const phoneNumber = currentUser.phoneNumber;
+
+          // Validate the mobile money transaction
+          const validation = validateMobileMoneyTransaction(
+              momoDetails.provider as any,
+              phoneNumber,
+              amount
+          );
+
+          if (!validation.valid) {
+              alert(`Validation failed:\n${validation.errors.join('\n')}`);
+              setIsProcessingWallet(false);
+              return;
+          }
+
+          // Process Ghana Mobile Money Payment
+          const paymentResult = await processGhanaMobileMoneyPayment(
+              momoDetails.provider as any,
+              phoneNumber,
+              amount,
+              group.currency
+          );
+
+          if (!paymentResult.success) {
+              alert(`Payment Failed: ${paymentResult.error || paymentResult.message}`);
+              setIsProcessingWallet(false);
+              return;
+          }
+
+          // Create transaction record
           const newTx: Transaction = {
-              id: `tx-d-${Date.now()}`,
+              id: paymentResult.transactionId || `tx-d-${Date.now()}`,
               userId: currentUser.id,
               userName: currentUser.name,
               type: 'DEPOSIT',
               amount: amount,
               date: new Date().toISOString().split('T')[0],
-              status: 'COMPLETED'
+              status: 'PENDING' // Mobile Money transactions are initially pending
           };
+
           await db.addTransaction(newTx);
           if (onRefresh) onRefresh();
           setWalletModalOpen(false);
           setMomoDetails(prev => ({ ...prev, amount: '' }));
-          alert(`Successfully loaded ${group.currency} ${amount} to your Leader Wallet.`);
+
+          alert(`Payment Initiated!\n\n${paymentResult.message}\n\nTransaction ID: ${paymentResult.transactionId}`);
       } catch (err) {
-          alert("Payment failed.");
+          alert(`Payment failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
       } finally {
           setIsProcessingWallet(false);
       }
@@ -218,7 +262,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
     return (
       <div className="space-y-6 animate-fade-in">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatsCard title="Total Group Pool" value={`${group.currency} ${group.totalPool.toLocaleString()}`} trend="Live Balance" trendUp={true} icon={DollarSign} color="bg-emerald-600" />
+          <StatsCard title="Total Group Pool" value={moneyFormatter(group.totalPool, group.currency)} trend="Live Balance" trendUp={true} icon={DollarSign} color="bg-emerald-600" />
           <StatsCard title="Active Members" value={activeMembers.length.toString()} trend={`${pendingMembers.length} New Requests`} trendUp={true} icon={Users} color="bg-blue-600" />
           <StatsCard title="Collection Status" value={`${Math.round(collectionProgress)}%`} icon={CheckCircle} color="bg-purple-600" />
           <StatsCard title="Pending Actions" value={(pendingTransactions.length + pendingMembers.length).toString()} trend="Needs Review" trendUp={false} icon={AlertTriangle} color="bg-orange-500" />
@@ -227,11 +271,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
           <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg font-bold text-gray-800 dark:text-white">Active Cycle Progress</h3>
+              <div className="text-right">
+                <p className="text-sm text-gray-500 dark:text-gray-400">Collection Target</p>
+                <p className="text-lg font-bold text-gray-900 dark:text-white">{moneyFormatter(cycleTarget, group.currency)}</p>
+              </div>
             </div>
-            <div className="h-64 flex items-center justify-center bg-gray-50 dark:bg-gray-700 rounded-lg border border-dashed border-gray-200 dark:border-gray-600">
-              <div className="text-center">
-                  <TrendingUp className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                  <p className="text-gray-400 text-sm">Real-time charts sync with MySQL</p>
+            <div className="space-y-4">
+              <div className="flex items-end gap-4">
+                <div className="flex-1">
+                  <div className="text-sm text-gray-600 dark:text-gray-300 mb-2">Collected vs Target</div>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <AreaChart data={[
+                      { name: 'Progress', collected: group.totalPool, target: cycleTarget }
+                    ]}>
+                      <defs>
+                        <linearGradient id="colorCollected" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="#10b981" stopOpacity={0.1}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis dataKey="name" stroke="#9ca3af" />
+                      <YAxis stroke="#9ca3af" />
+                      <RechartsTooltip contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#fff' }} />
+                      <Area type="monotone" dataKey="collected" stroke="#10b981" fillOpacity={1} fill="url(#colorCollected)" name="Collected" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                  <p className="text-xs text-green-600 dark:text-green-400 font-medium">COLLECTED</p>
+                  <p className="text-xl font-bold text-green-700 dark:text-green-300">{moneyFormatter(group.totalPool, group.currency)}</p>
+                </div>
+                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">REMAINING</p>
+                  <p className="text-xl font-bold text-blue-700 dark:text-blue-300">{moneyFormatter(Math.max(0, cycleTarget - group.totalPool), group.currency)}</p>
+                </div>
+                <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+                  <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">COMPLETION</p>
+                  <p className="text-xl font-bold text-purple-700 dark:text-purple-300">{Math.round(collectionProgress)}%</p>
+                </div>
               </div>
             </div>
           </div>
@@ -261,14 +341,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   };
 
   const renderMembers = () => {
-      const filteredMembers = members.filter(member => member.name.toLowerCase().includes(searchTerm.toLowerCase()) || member.email.toLowerCase().includes(searchTerm.toLowerCase()));
+      // Show only members that belong to this group (in payout schedule) and match search term
+      const groupMemberIds = new Set(group.payoutSchedule);
+      const filteredMembers = members.filter(member => 
+          groupMemberIds.has(member.id) && 
+          (member.name.toLowerCase().includes(searchTerm.toLowerCase()) || member.email.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
       return (
       <div className="space-y-6 animate-fade-in">
         <div className="bg-gradient-to-r from-gray-900 to-gray-800 rounded-xl p-6 text-white shadow-lg relative overflow-hidden">
             <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <div>
                     <div className="flex items-center gap-2 mb-2 text-gray-300"><Wallet className="w-5 h-5" /><span className="text-sm font-medium uppercase tracking-wider">Leader Wallet</span></div>
-                    <h3 className="text-4xl font-bold mb-1">{group.currency} {walletBalance.toLocaleString()}</h3>
+                    <h3 className="text-4xl font-bold mb-1">{moneyFormatter(walletBalance, group.currency)}</h3>
                     <p className="text-xs text-gray-400">Manage group transactions from here.</p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
@@ -396,10 +481,105 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
 
         {walletModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6">
-                    <h3 className="text-lg font-bold mb-4">Load Leader Wallet</h3>
-                    <input type="number" value={momoDetails.amount} onChange={(e) => setMomoDetails({...momoDetails, amount: e.target.value})} className="w-full p-3 border rounded-lg mb-4" placeholder="Amount (GHS)" />
-                    <button onClick={handleLoadWallet} disabled={isProcessingWallet} className="w-full py-3 bg-primary-600 text-white rounded-lg font-bold">{isProcessingWallet ? 'Processing...' : 'Confirm Load'}</button>
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 border border-gray-100 dark:border-gray-700">
+                    <div className="flex items-center justify-between mb-6">
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">Load Leader Wallet</h3>
+                        <button onClick={() => setWalletModalOpen(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+                    </div>
+
+                    <div className="space-y-4">
+                        {/* Provider Selection */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Mobile Money Provider</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                {['MTN', 'Vodafone', 'AirtelTigo'].map((provider) => (
+                                    <button
+                                        key={provider}
+                                        onClick={() => setMomoDetails(prev => ({...prev, provider}))}
+                                        className={`py-2.5 rounded-lg border text-sm font-bold transition-all ${
+                                            momoDetails.provider === provider
+                                                ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-500 text-primary-700 dark:text-primary-400 ring-1 ring-primary-500'
+                                                : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                        }`}
+                                    >
+                                        {provider}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Phone Number Display */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Registered Phone Number</label>
+                            <div className="relative">
+                                <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                <div className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700/50 text-gray-900 dark:text-white font-mono flex items-center justify-between">
+                                    <span>{normalizePhoneNumber(currentUser.phoneNumber || 'Not set')}</span>
+                                    <span className="text-[10px] font-bold uppercase text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600 px-2 py-1 rounded">Verified</span>
+                                </div>
+                            </div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Your registered mobile money account</p>
+                        </div>
+
+                        {/* Amount Input */}
+                        <div>
+                            <div className="flex items-center justify-between">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Amount (GHS)</label>
+                                <button
+                                    type="button"
+                                    onClick={() => setMomoDetails(prev => ({ ...prev, amount: String(group.contributionAmount) }))}
+                                    className="text-sm text-primary-600 hover:underline"
+                                >
+                                    Use contribution: {moneyFormatter(group.contributionAmount, group.currency)}
+                                </button>
+                            </div>
+                            <div className="relative">
+                                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                <input
+                                    type="number"
+                                    placeholder="0.00"
+                                    value={momoDetails.amount}
+                                    onChange={(e) => setMomoDetails(prev => ({...prev, amount: e.target.value}))}
+                                    min="1"
+                                    max="10000"
+                                    className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                                />
+                            </div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Min: GHS 1 | Max: GHS 10,000</p>
+                        </div>
+
+                        {/* Info Box */}
+                        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-300">
+                            You will receive a USSD prompt on your phone to complete the payment.
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setWalletModalOpen(false)}
+                                className="flex-1 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-bold transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleLoadWallet}
+                                disabled={isProcessingWallet || !momoDetails.amount || !currentUser.phoneNumber}
+                                className="flex-1 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg font-bold transition-colors flex items-center justify-center gap-2"
+                            >
+                                {isProcessingWallet ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Processing...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Smartphone className="w-4 h-4" />
+                                        Load Wallet
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         )}

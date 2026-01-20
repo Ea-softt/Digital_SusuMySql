@@ -709,7 +709,16 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                   </div>
 
                   <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount ({group.currency})</label>
+                      <div className="flex items-center justify-between">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount ({group.currency})</label>
+                          <button
+                              type="button"
+                              onClick={() => setMomoDetails(prev => ({ ...prev, amount: String(group.contributionAmount) }))}
+                              className="text-sm text-primary-600 hover:underline"
+                          >
+                              Use contribution: {moneyFormatter(group.contributionAmount, group.currency)}
+                          </button>
+                      </div>
                       <input 
                           type="number" 
                           value={momoDetails.amount}

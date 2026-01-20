@@ -7,6 +7,7 @@ import { Users, Shield, Activity, DollarSign, Search, AlertTriangle, CheckCircle
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { db } from '../services/database';
 import { GroupChat } from './GroupChat';
+import { moneyFormatter } from '../utils/formatters';
 
 
 
@@ -1216,7 +1217,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                      {/* Admin Wallet Card */}
                      <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-xl p-6 text-white shadow-lg relative overflow-hidden">
                          <div className="absolute top-0 right-0 p-4 opacity-10">
-                             <DollarSign className="w-32 h-32" />
+                            <DollarSign className="w-32 h-32" />
                          </div>
                          <p className="text-slate-400 text-sm font-medium mb-1 uppercase tracking-wider">Platform Treasury</p>
                          <h2 className="text-4xl font-bold mb-4">GHS {availablePlatformBalance.toLocaleString()}</h2>

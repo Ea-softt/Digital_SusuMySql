@@ -432,6 +432,39 @@ class DatabaseService {
     this.messages.push(msg);
     return msg;
   }
-}
+
+  async deleteGroup(groupId: string): Promise<boolean> {
+    if (this.isServerOnline) {
+      try {
+        const res = await fetch(`${API_BASE}/groups/${groupId}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        if (res.ok) {
+          this.groups = this.groups.filter(g => g.id !== groupId);
+          return true;
+        }
+      } catch (e) {
+        console.error("Delete group failed", e);
+      }
+    }
+    return false;
+  }
+
+  async clearAllGroups(): Promise<boolean> {
+    if (this.isServerOnline) {
+      try {
+        const groupIds = [...this.groups.map(g => g.id)];
+        for (const groupId of groupIds) {
+          await this.deleteGroup(groupId);
+        }
+        this.groups = [];
+        return true;
+      } catch (e) {
+        console.error("Clear all groups failed", e);
+      }
+    }
+    return false;
+  }}
 
 export const db = new DatabaseService();
