@@ -63,6 +63,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawPassword, setWithdrawPassword] = useState('');
 
+  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<UserRole>(UserRole.MEMBER);
+
   // --- Help Center State ---
   const [isHelpCenterOpen, setIsHelpCenterOpen] = useState(false);
 
@@ -70,6 +73,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [inviteInput, setInviteInput] = useState('');
   const [isInviting, setIsInviting] = useState(false);
+
+  const [groupMemberIds, setGroupMemberIds] = useState(new Set(group.payoutSchedule));
+
+  useEffect(() => {
+    if (!group?.id) return;
+
+    const fetchGroupMembers = async () => {
+        try {
+            const response = await fetch(`http://localhost:3001/api/group-memberships`);
+            if (response.ok) {
+                const allMemberships = await response.json();
+                if (Array.isArray(allMemberships)) {
+                    const currentGroupMemberIds = new Set<string>();
+                    allMemberships.forEach((m: any) => {
+                        if (m.group_id === group.id) {
+                            currentGroupMemberIds.add(m.user_id);
+                        }
+                    });
+
+                    // Fallback for safety, include anyone in payout schedule
+                    group.payoutSchedule.forEach(id => currentGroupMemberIds.add(id));
+
+                    setGroupMemberIds(currentGroupMemberIds);
+                }
+            }
+        } catch (error) {
+            console.error("Could not fetch group memberships, falling back to payout schedule.", error);
+        }
+    };
+
+    fetchGroupMembers();
+  }, [group?.id, group.payoutSchedule]);
 
   // --- Sync State ---
   useEffect(() => {
@@ -161,8 +196,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
         alert("Group settings saved permanently to MySQL.");
         if (onRefresh) onRefresh();
         setConfirmDialog(prev => ({ ...prev, isOpen: false }));
-    } catch (err) {
-        alert("Failed to save settings.");
+    } catch (err: any) {
+        alert(`Failed to save settings: ${err.message || "Unknown error"}`);
     }
   };
 
@@ -350,8 +385,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   };
 
   const renderMembers = () => {
-      // Show only members that belong to this group (in payout schedule) and match search term
-      const groupMemberIds = new Set(group.payoutSchedule);
+      // Show only members that belong to this group and match search term
       const filteredMembers = members.filter(member => 
           groupMemberIds.has(member.id) && 
           (member.name.toLowerCase().includes(searchTerm.toLowerCase()) || member.email.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -412,23 +446,91 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
       );
   };
 
-  const renderTransactions = () => (
+  const renderTransactions = () => {
+    // Filter transactions to only show 'CONTRIBUTION' type
+    const filteredContributionTransactions = transactions.filter(tx => 
+        tx.type === 'CONTRIBUTION' && 
+        (tx.userName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+         tx.type.toLowerCase().includes(searchTerm.toLowerCase())) // Also allow searching by type
+    );
+
+    // Filter transactions for the current administrator
+    const adminPersonalTransactions = transactions.filter(tx =>
+        tx.userId === currentUser.id &&
+        (tx.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+         tx.type.toLowerCase().includes(searchTerm.toLowerCase()))
+    ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()); // Sort by date descending
+
+    return (
       <div className="space-y-6 animate-fade-in">
+          {/* Member Contribution Transactions */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border overflow-hidden">
+              <h3 className="font-bold text-lg text-gray-900 dark:text-white px-6 py-4 border-b border-gray-100 dark:border-gray-700">Member Contribution Transactions</h3>
               <table className="w-full text-left text-sm">
-                  <thead className="bg-gray-50 dark:bg-gray-700 text-gray-600"><tr><th className="px-6 py-4">Date</th><th className="px-6 py-4">User</th><th className="px-6 py-4">Type</th><th className="px-6 py-4">Amount</th><th className="px-6 py-4">Status</th><th className="px-6 py-4 text-right">Actions</th></tr></thead>
-                  <tbody className="divide-y divide-gray-100">
-                      {transactions.filter(t => t.userName.toLowerCase().includes(searchTerm.toLowerCase())).map(tx => (
+                  <thead className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                      <tr>
+                          <th className="px-6 py-4">Date</th>
+                          <th className="px-6 py-4">Member Name</th>
+                          <th className="px-6 py-4">Amount</th>
+                          <th className="px-6 py-4">Status</th>
+                      </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                      {filteredContributionTransactions.length > 0 ? filteredContributionTransactions.map(tx => (
                           <tr key={tx.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                              <td className="px-6 py-4">{tx.date}</td><td className="px-6 py-4 font-medium">{tx.userName}</td><td className="px-6 py-4"><span className={`px-2 py-0.5 rounded text-xs font-bold ${tx.type === 'CONTRIBUTION' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>{tx.type}</span></td><td className="px-6 py-4 font-bold">{group.currency} {tx.amount}</td><td className="px-6 py-4"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tx.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{tx.status}</span></td>
-                              <td className="px-6 py-4 text-right">{tx.status === 'PENDING' && ( <button onClick={() => handleApproveTransaction(tx.id)} className="text-primary-600 font-bold text-xs bg-primary-50 px-3 py-1.5 rounded">Confirm Receipt</button> )}</td>
+                              <td className="px-6 py-4">{tx.date}</td>
+                              <td className="px-6 py-4 font-medium">{tx.userName}</td>
+                              <td className="px-6 py-4 font-bold">{moneyFormatter(tx.amount, group.currency)}</td>
+                              <td className="px-6 py-4"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tx.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{tx.status}</span></td>
                           </tr>
-                      ))}
+                      )) : (
+                        <tr>
+                            <td colSpan={4} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">No member contribution transactions found.</td>
+                        </tr>
+                      )}
+                  </tbody>
+              </table>
+          </div>
+
+          {/* Administrator's Personal Transactions */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border overflow-hidden mt-8">
+              <h3 className="font-bold text-lg text-gray-900 dark:text-white px-6 py-4 border-b border-gray-100 dark:border-gray-700">Administrator's Personal Transactions</h3>
+              <table className="w-full text-left text-sm">
+                  <thead className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                      <tr>
+                          <th className="px-6 py-4">Date</th>
+                          <th className="px-6 py-4">Type</th>
+                          <th className="px-6 py-4">Amount</th>
+                          <th className="px-6 py-4">Status</th>
+                      </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                      {adminPersonalTransactions.length > 0 ? adminPersonalTransactions.map(tx => (
+                          <tr key={tx.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                              <td className="px-6 py-4">{tx.date}</td>
+                              <td className="px-6 py-4">
+                                <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                                    tx.type === 'CONTRIBUTION' ? 'bg-blue-100 text-blue-700' :
+                                    tx.type === 'DEPOSIT' ? 'bg-green-100 text-green-700' :
+                                    tx.type === 'WITHDRAWAL' ? 'bg-red-100 text-red-700' :
+                                    tx.type === 'PAYOUT' ? 'bg-purple-100 text-purple-700' :
+                                    'bg-gray-100 text-gray-700'
+                                }`}>{tx.type}</span>
+                              </td>
+                              <td className="px-6 py-4 font-bold">{moneyFormatter(tx.amount, group.currency)}</td>
+                              <td className="px-6 py-4"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tx.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{tx.status}</span></td>
+                          </tr>
+                      )) : (
+                        <tr>
+                            <td colSpan={4} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">No personal transactions found for the administrator.</td>
+                        </tr>
+                      )}
                   </tbody>
               </table>
           </div>
       </div>
-  );
+    );
+  };
 
   const renderSettings = () => (
       <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
@@ -442,6 +544,303 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
           </div>
       </div>
   );
+
+  const renderPayouts = () => {
+    const payoutHistory = transactions.filter(t => t.type === 'PAYOUT' && t.status === 'COMPLETED').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const paidUserIds = new Set(payoutHistory.map(t => t.userId));
+    
+    const membersWhoHaveReceived = members.filter(m => paidUserIds.has(m.id));
+    const membersYetToReceive = payoutOrder.map(userId => members.find(m => m.id === userId)).filter((m): m is User => !!m && !paidUserIds.has(m.id));
+
+    let nextUserIndex = payoutOrder.findIndex(userId => !paidUserIds.has(userId));
+    if (nextUserIndex === -1 && payoutOrder.length > 0) {
+        nextUserIndex = payoutOrder.length; 
+    }
+
+    const nextRecipient = members.find(m => m.id === payoutOrder[nextUserIndex]);
+    
+    const handleManualPayout = async () => {
+        if (!nextRecipient) {
+            alert("No one is scheduled for the next payout.");
+            return;
+        }
+
+        const payoutAmount = group.totalPool;
+        if (walletBalance < payoutAmount) {
+            alert(`Insufficient funds for payout. Pool: ${moneyFormatter(payoutAmount, group.currency)}, Wallet: ${moneyFormatter(walletBalance, group.currency)}`);
+            return;
+        }
+
+        setConfirmDialog({
+            isOpen: true,
+            title: 'Confirm Manual Payout',
+            message: `Are you sure you want to send ${moneyFormatter(payoutAmount, group.currency)} to ${nextRecipient.name}?`,
+            type: 'warning',
+            onConfirm: async () => {
+                setIsProcessingPayout(true);
+                try {
+                    await new Promise(res => setTimeout(res, 1500)); 
+
+                    const newTx: Transaction = {
+                        id: `tx-p-${Date.now()}`,
+                        userId: nextRecipient.id,
+                        userName: nextRecipient.name,
+                        type: 'PAYOUT',
+                        amount: payoutAmount,
+                        date: new Date().toISOString().split('T')[0],
+                        status: 'COMPLETED'
+                    };
+
+                    await db.addTransaction(newTx);
+                    
+                    await db.updateGroup(group.id, { ...group, totalPool: 0 });
+
+                    alert(`Payout successful! ${nextRecipient.name} has been paid.`);
+                    if (onRefresh) onRefresh();
+
+                } catch (err) {
+                    alert(`Payout failed: ${err instanceof Error ? err.message : 'An unknown error occurred.'}`);
+                } finally {
+                    setIsProcessingPayout(false);
+                    setConfirmDialog(prev => ({...prev, isOpen: false}));
+                }
+            }
+        });
+    };
+
+    const handleReorder = (newOrder: string[]) => {
+      setPayoutOrder(newOrder);
+      db.updateGroup(group.id, { ...group, payoutSchedule: newOrder });
+      alert("Payout order updated locally. Save settings to persist.");
+    };
+
+    return (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
+            <div className="lg:col-span-2 space-y-6">
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                    <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-2">Next Payout Recipient</h3>
+                    {nextRecipient ? (
+                        <div className="flex flex-col sm:flex-row items-center justify-between p-4 bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-800 rounded-lg">
+                           <div className="flex items-center gap-4">
+                               <img src={nextRecipient.avatar} alt={nextRecipient.name} className="w-12 h-12 rounded-full border-2 border-white"/>
+                               <div>
+                                   <p className="font-bold text-lg text-primary-800 dark:text-primary-300">{nextRecipient.name}</p>
+                                   <p className="text-sm text-primary-600 dark:text-primary-400">Scheduled for <span className="font-bold">{moneyFormatter(group.totalPool, group.currency)}</span></p>
+                               </div>
+                           </div>
+                            <button 
+                                onClick={handleManualPayout} 
+                                disabled={isProcessingPayout || group.totalPool <= 0}
+                                className="w-full mt-4 sm:mt-0 sm:w-auto px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-bold shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isProcessingPayout ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                                {isProcessingPayout ? 'Processing...' : 'Pay Now'}
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="text-center p-8 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                            <p className="font-medium text-gray-700 dark:text-gray-300">All members have been paid for this cycle!</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">The payout schedule is complete. You can start a new cycle in settings.</p>
+                        </div>
+                    )}
+                </div>
+
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="font-bold text-lg text-gray-900 dark:text-white">Payout Queue</h3>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => handleReorder([...payoutOrder].sort(() => Math.random() - 0.5))} className="p-2 text-gray-500 hover:text-primary-600 rounded-full bg-gray-100 dark:bg-gray-700"><Shuffle className="w-4 h-4" /></button>
+                        <span className="text-xs text-gray-400">Randomize</span>
+                      </div>
+                    </div>
+                    
+                    <ul className="space-y-3">
+                        {payoutOrder.map((userId, index) => {
+                            const member = members.find(m => m.id === userId);
+                            if (!member) return null;
+
+                            const isPaid = paidUserIds.has(userId);
+                            const isNext = index === nextUserIndex;
+
+                            return (
+                                <li key={userId} className={`flex items-center justify-between p-3 rounded-lg transition-all ${isNext ? 'bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700' : isPaid ? 'bg-gray-100 dark:bg-gray-700/50 opacity-60' : 'bg-gray-50 dark:bg-gray-800'}`}>
+                                    <div className="flex items-center gap-3">
+                                        <span className={`font-bold text-sm w-6 text-center ${isNext ? 'text-blue-600 dark:text-blue-300' : 'text-gray-400'}`}>{index + 1}</span>
+                                        <img src={member.avatar} alt={member.name} className="w-8 h-8 rounded-full" />
+                                        <p className="font-medium text-gray-800 dark:text-gray-200">{member.name}</p>
+                                    </div>
+                                    <div>
+                                        {isPaid ? <span className="px-2 py-1 text-xs font-bold text-green-800 dark:text-green-300 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center gap-1"><CheckCircle className="w-3 h-3"/> Paid</span> : isNext ? <span className="px-2 py-1 text-xs font-bold text-blue-800 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/30 rounded-full animate-pulse">Next Up</span> : <span className="text-xs text-gray-500">Queued</span>}
+                                    </div>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                        <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-4">Members Who Have Received</h3>
+                        <div className="space-y-3">
+                            {membersWhoHaveReceived.length > 0 ? membersWhoHaveReceived.map(member => (
+                                <div key={member.id} className="flex items-center gap-3 p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                                    <img src={member.avatar} alt={member.name} className="w-8 h-8 rounded-full" />
+                                    <p className="font-medium text-gray-800 dark:text-gray-200">{member.name}</p>
+                                </div>
+                            )) : <p className="text-sm text-gray-500">No members have received payouts yet.</p>}
+                        </div>
+                    </div>
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                        <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-4">Members Yet to Receive</h3>
+                         <div className="space-y-3">
+                            {membersYetToReceive.length > 0 ? membersYetToReceive.map(member => (
+                                <div key={member.id} className="flex items-center gap-3 p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                                    <img src={member.avatar} alt={member.name} className="w-8 h-8 rounded-full" />
+                                    <p className="font-medium text-gray-800 dark:text-gray-200">{member.name}</p>
+                                </div>
+                            )) : <p className="text-sm text-gray-500">All members have received their payout.</p>}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Payout History Column */}
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-6 flex items-center gap-2"><History className="w-5 h-5 text-gray-400"/> Payout History</h3>
+                <div className="space-y-4">
+                  {payoutHistory.length > 0 ? payoutHistory.map(tx => (
+                     <div key={tx.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                       <div className="flex items-center gap-3">
+                         <div className={`p-2 rounded-full ${tx.status === 'COMPLETED' ? 'bg-green-100 dark:bg-green-900' : 'bg-yellow-100'}`}>
+                           <ArrowUpRight className={`w-4 h-4 ${tx.status === 'COMPLETED' ? 'text-green-600' : 'text-yellow-600'}`} />
+                         </div>
+                         <div>
+                           <p className="font-medium text-gray-900 dark:text-white">{tx.userName}</p>
+                           <p className="text-xs text-gray-500 dark:text-gray-400">{new Date(tx.date).toLocaleDateString()}</p>
+                         </div>
+                       </div>
+                       <div className="text-right">
+                         <p className="font-bold text-gray-800 dark:text-gray-200">{moneyFormatter(tx.amount, group.currency)}</p>
+                         <p className="text-xs text-green-600 dark:text-green-400 font-medium">{tx.status}</p>
+                       </div>
+                     </div>
+                  )) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <FileDown className="w-8 h-8 mx-auto mb-2 text-gray-400"/>
+                      No payouts have been made in this cycle yet.
+                    </div>
+                  )}
+                </div>
+            </div>
+        </div>
+    );
+  };
+
+  const handleSuspendMember = async (id: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Suspend Member',
+      message: `Are you sure you want to suspend this member? They will lose access to the group.`,
+      type: 'danger',
+      onConfirm: async () => {
+        try {
+            await db.updateUser(id, { status: 'SUSPENDED' });
+            if (onRefresh) onRefresh();
+            setViewMember(null);
+            setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+            alert("Member has been suspended.");
+        } catch (err) {
+            alert("Action failed. Server error.");
+        }
+      }
+    });
+  };
+
+  const renderMemberDetailsModal = () => {
+    if (!viewMember) return null;
+
+    const memberTransactions = transactions.filter(t => t.userId === viewMember.id);
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl h-[90vh] flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700">
+                <div className="flex-shrink-0 p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-800">
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                        <UserIcon className="w-6 h-6 text-primary-600"/>
+                        Member Profile
+                    </h3>
+                    <button onClick={() => setViewMember(null)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+                        <X className="w-5 h-5 text-gray-500"/>
+                    </button>
+                </div>
+                <div className="flex-grow overflow-y-auto p-6 space-y-6">
+                    <div className="flex items-center gap-6">
+                        <img src={viewMember.avatar} alt={viewMember.name} className="w-24 h-24 rounded-full border-4 border-gray-100 dark:border-gray-700" />
+                        <div className="flex-1">
+                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{viewMember.name}</h2>
+                            <p className="text-gray-500 dark:text-gray-400">{viewMember.occupation || 'No occupation listed'}</p>
+                            <div className="flex items-center gap-4 mt-2">
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold ${viewMember.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{viewMember.status}</span>
+                                <span className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-1"><ShieldCheck className="w-4 h-4 text-green-500" /> Reliability: {viewMember.reliabilityScore}%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg">
+                           <h4 className="font-bold text-gray-800 dark:text-gray-200 mb-4">Contact Information</h4>
+                           <div className="space-y-3 text-sm">
+                               <p className="flex items-center gap-3"><Mail className="w-4 h-4 text-gray-400"/> {viewMember.email}</p>
+                               <p className="flex items-center gap-3"><Phone className="w-4 h-4 text-gray-400"/> {viewMember.phoneNumber || 'Not provided'}</p>
+                               <p className="flex items-center gap-3"><MapPin className="w-4 h-4 text-gray-400"/> {viewMember.location || 'Not provided'}</p>
+                           </div>
+                        </div>
+                        <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg">
+                           <h4 className="font-bold text-gray-800 dark:text-gray-200 mb-4">Group Details</h4>
+                           <div className="space-y-3 text-sm">
+                               <p className="flex items-center gap-3"><CalendarIcon className="w-4 h-4 text-gray-400"/> Joined on {new Date(viewMember.joinDate).toLocaleDateString()}</p>
+                               <p className="flex items-center gap-3"><Briefcase className="w-4 h-4 text-gray-400"/> Role: {viewMember.role}</p>
+                               <p className="flex items-center gap-3"><ScanFace className="w-4 h-4 text-gray-400"/> KYC Status: <span className="font-bold">{viewMember.verificationStatus}</span></p>
+                           </div>
+                        </div>
+                    </div>
+
+                    <div>
+                      <h4 className="font-bold text-gray-800 dark:text-gray-200 mb-4">Transaction History</h4>
+                      <div className="border border-gray-100 dark:border-gray-700 rounded-lg overflow-hidden">
+                        <table className="w-full text-left text-sm">
+                          <thead className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                            <tr>
+                              <th className="px-4 py-3">Date</th>
+                              <th className="px-4 py-3">Type</th>
+                              <th className="px-4 py-3">Amount</th>
+                              <th className="px-4 py-3">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                            {memberTransactions.length > 0 ? memberTransactions.map(tx => (
+                              <tr key={tx.id}>
+                                <td className="px-4 py-3">{tx.date}</td>
+                                <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded text-xs font-bold ${tx.type === 'CONTRIBUTION' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>{tx.type}</span></td>
+                                <td className="px-4 py-3 font-medium">{moneyFormatter(tx.amount, group.currency)}</td>
+                                <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tx.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{tx.status}</span></td>
+                              </tr>
+                            )) : (
+                              <tr><td colSpan={4} className="text-center p-8 text-gray-500">No transactions found for this member.</td></tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                </div>
+                 <div className="flex-shrink-0 p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex justify-end items-center gap-3">
+                    <button onClick={() => handleSuspendMember(viewMember.id)} className="px-4 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg flex items-center gap-2"><Trash2 className="w-4 h-4"/> Suspend Member</button>
+                    <button className="px-4 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center gap-2"><UserCog className="w-4 h-4"/> Manage Roles</button>
+                </div>
+            </div>
+        </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -494,11 +893,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
             {activeTab === 'members' && renderMembers()}
             {activeTab === 'transactions' && renderTransactions()}
             {activeTab === 'settings' && renderSettings()}
-            {activeTab === 'payouts' && ( <div className="p-12 text-center text-gray-500">Payout logic uses MySQL PayoutSchedule table. Triggering now...</div> )}
+            {activeTab === 'payouts' && renderPayouts()}
         </div>
 
         {/* --- Modals --- */}
         
+        {viewMember && renderMemberDetailsModal()}
+
         {isHelpCenterOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
                 <div className="bg-gray-50 dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700">

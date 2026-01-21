@@ -38,6 +38,7 @@ export interface SystemConfig {
 
 // A user can be part of multiple groups. This tracks their status in ONE specific group.
 export interface GroupMembership {
+  userId?: string;
   groupId: string;
   groupName: string;
   role: UserRole;

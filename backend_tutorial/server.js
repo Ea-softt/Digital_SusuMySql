@@ -67,7 +67,8 @@ async function initializeDatabase() {
                 next_payout_date DATE,
                 invite_code VARCHAR(20) UNIQUE,
                 welcome_message TEXT,
-                icon LONGTEXT
+                icon LONGTEXT,
+                payout_schedule JSON
             )
         `);
 
@@ -76,6 +77,10 @@ async function initializeDatabase() {
         const [cols] = await connection.query(`SHOW COLUMNS FROM users LIKE 'kyc_document_image'`);
         if (cols.length === 0) {
             await connection.query(`ALTER TABLE users ADD COLUMN kyc_document_image LONGTEXT AFTER avatar`);
+        }
+        const [groupCols] = await connection.query(`SHOW COLUMNS FROM savings_groups LIKE 'payout_schedule'`);
+        if (groupCols.length === 0) {
+            await connection.query(`ALTER TABLE savings_groups ADD COLUMN payout_schedule JSON`);
         }
         await connection.query(`ALTER TABLE users MODIFY COLUMN avatar LONGTEXT`);
         await connection.query(`ALTER TABLE users MODIFY COLUMN kyc_document_image LONGTEXT`);
@@ -185,6 +190,32 @@ app.post('/api/groups', async (req, res) => {
         res.status(500).json({ error: error.message });
     } finally {
         connection.release();
+    }
+});
+
+app.put('/api/groups/:id', async (req, res) => {
+    const { name, contributionAmount, currency, frequency, welcomeMessage, icon, payoutSchedule } = req.body;
+    const updates = [];
+    const values = [];
+
+    if (name) { updates.push('name = ?'); values.push(name); }
+    if (contributionAmount) { updates.push('contribution_amount = ?'); values.push(contributionAmount); }
+    if (currency) { updates.push('currency = ?'); values.push(currency); }
+    if (frequency) { updates.push('frequency = ?'); values.push(frequency); }
+    if (welcomeMessage) { updates.push('welcome_message = ?'); values.push(welcomeMessage); }
+    if (icon) { updates.push('icon = ?'); values.push(icon); }
+    if (payoutSchedule) { updates.push('payout_schedule = ?'); values.push(JSON.stringify(payoutSchedule)); }
+
+    if (updates.length === 0) return res.json({ success: true, message: 'No changes provided.' });
+
+    values.push(req.params.id);
+    const sql = `UPDATE savings_groups SET ${updates.join(', ')} WHERE id = ?`;
+    try {
+        await pool.query(sql, values);
+        res.json({ success: true });
+    } catch (error) {
+        console.error(`Group update failed for ID ${req.params.id}:`, error);
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -404,6 +435,15 @@ app.post('/api/group-membership/delete', async (req, res) => {
         res.json({ success: true });
     } catch (error) {
         console.error('POST /api/group-membership/delete error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/group-memberships', async (req, res) => {
+    try {
+        const [rows] = await pool.query('SELECT * FROM group_memberships');
+        res.json(rows);
+    } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });

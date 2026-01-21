@@ -12,6 +12,7 @@ class DatabaseService {
   private transactions: Transaction[] = [];
   private messages: GroupMessage[] = [];
   private auditLogs: AuditLog[] = [];
+  private memberships: GroupMembership[] = [];
   private isServerOnline: boolean | null = null;
   private systemConfig: SystemConfig = {
     defaultCurrency: 'GHS',
@@ -55,6 +56,18 @@ class DatabaseService {
 
   private mapGroup(g: any): Group {
     if (!g) return {} as Group;
+    
+    let schedule = [];
+    if (typeof g.payout_schedule === 'string') {
+        try {
+            schedule = JSON.parse(g.payout_schedule);
+        } catch (e) {
+            schedule = [];
+        }
+    } else if (Array.isArray(g.payout_schedule)) {
+        schedule = g.payout_schedule;
+    }
+
     return {
       id: g.id,
       name: g.name,
@@ -68,7 +81,7 @@ class DatabaseService {
       inviteCode: g.invite_code || '',
       welcomeMessage: g.welcome_message || '',
       icon: this.isValidImage(g.icon) ? g.icon : '', 
-      payoutSchedule: [], 
+      payoutSchedule: schedule, 
       reminderDaysBefore: 3
     };
   }
@@ -285,18 +298,23 @@ class DatabaseService {
                     currency: data.currency,
                     frequency: data.frequency,
                     welcomeMessage: data.welcomeMessage,
-                    icon: data.icon
+                    icon: data.icon,
+                    payoutSchedule: data.payoutSchedule
                 })
             });
             if (res.ok) {
                 await this.syncData();
                 return this.groups.find(g => g.id === groupId) || null;
+            } else {
+                const errorData = await res.json();
+                throw new Error(errorData.error || 'Failed to update group settings on server.');
             }
-        } catch (e) {
+        } catch (e: any) {
             console.error("Update group service failed", e);
+            throw new Error(e.message || "Failed to update group settings.");
         }
     }
-    return null;
+    throw new Error("Server is offline. Cannot update group settings.");
   }
 
   async joinGroupRequest(userId: string, inviteCode: string): Promise<{ success: boolean, message: string }> {
