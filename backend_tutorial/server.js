@@ -333,7 +333,7 @@ app.get('/api/transactions/:userId', async (req, res) => {
 app.get('/api/groups/:groupId/transactions/contributions', async (req, res) => {
     try {
         const [rows] = await pool.query(
-            'SELECT t.*, u.name as userName FROM transactions t JOIN users u ON t.user_id = u.id WHERE t.group_id = ? AND t.type = "CONTRIBUTION" ORDER BY t.date DESC',
+            'SELECT t.*, u.name as userName FROM transactions t LEFT JOIN users u ON t.user_id = u.id WHERE t.group_id = ? AND t.type = "CONTRIBUTION" ORDER BY t.date DESC',
             [req.params.groupId]
         );
         res.json(rows);

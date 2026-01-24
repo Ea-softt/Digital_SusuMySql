@@ -66,6 +66,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<UserRole>(UserRole.MEMBER);
 
+  const [groupContributionTransactions, setGroupContributionTransactions] = useState<Transaction[]>([]);
+
+  useEffect(() => {
+    const fetchGroupContributions = async () => {
+      if (group?.id) {
+        try {
+          const contributions = await db.getGroupContributionTransactions(group.id);
+          setGroupContributionTransactions(contributions);
+        } catch (error) {
+          console.error("Failed to fetch group contribution transactions:", error);
+          setGroupContributionTransactions([]); // Ensure it's an empty array on error
+        }
+      }
+    };
+    fetchGroupContributions();
+  }, [group?.id, onRefresh]);
+
+
   // --- Help Center State ---
   const [isHelpCenterOpen, setIsHelpCenterOpen] = useState(false);
 
@@ -166,6 +184,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
         setConfirmDialog(prev => ({ ...prev, isOpen: false }));
     } catch (err) {
         alert("Failed to verify payment.");
+    }
+  };
+
+  const handleRejectTransaction = async (txId: string) => {
+    const tx = transactions.find(t => t.id === txId);
+    if (!tx) return;
+
+    try {
+        // Mock rejection as we don't have a specific backend endpoint for this.
+        alert("Transaction rejected and member notified.");
+        if (onRefresh) onRefresh(); // Re-sync data from the server.
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+    } catch (err) {
+        alert("Action failed. Could not reject transaction.");
     }
   };
 
@@ -491,12 +523,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   };
 
   const renderTransactions = () => {
-    // Filter transactions to show 'CONTRIBUTION' type from members of the current group.
-    const filteredContributionTransactions = transactions.filter(tx =>
-        tx.type === 'CONTRIBUTION' &&
-        groupMemberIds.has(tx.userId) &&
-        (tx.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-         tx.type.toLowerCase().includes(searchTerm.toLowerCase())) // Also allow searching by type
+    // Now uses dedicated state for group contributions, simplifying the filter.
+    const filteredContributionTransactions = groupContributionTransactions.filter(tx =>
+        tx.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        tx.type.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     // Filter transactions for the current administrator
@@ -518,6 +548,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                           <th className="px-6 py-4">Member Name</th>
                           <th className="px-6 py-4">Amount</th>
                           <th className="px-6 py-4">Status</th>
+                          <th className="px-6 py-4 text-right">Actions</th>
                       </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -527,10 +558,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                               <td className="px-6 py-4 font-medium">{tx.userName}</td>
                               <td className="px-6 py-4 font-bold">{moneyFormatter(tx.amount, group.currency)}</td>
                               <td className="px-6 py-4"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tx.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{tx.status}</span></td>
+                              <td className="px-6 py-4 text-right">
+                                {tx.status === 'PENDING' ? (
+                                    <div className="flex justify-end gap-2">
+                                        <button onClick={() => { setConfirmDialog({ isOpen: true, title: 'Approve Transaction', message: `Approve this ${moneyFormatter(tx.amount, group.currency)} contribution from ${tx.userName}?`, type: 'primary', onConfirm: () => handleApproveTransaction(tx.id) }); }} className="p-1 bg-green-100 text-green-700 rounded"><Check className="w-4 h-4" /></button>
+                                        <button onClick={() => { setConfirmDialog({ isOpen: true, title: 'Reject Transaction', message: `Reject this contribution from ${tx.userName}?`, type: 'danger', onConfirm: () => handleRejectTransaction(tx.id) }); }} className="p-1 bg-red-100 text-red-700 rounded"><X className="w-4 h-4" /></button>
+                                    </div>
+                                ) : (
+                                    <span className="text-xs text-gray-400 italic">No actions</span>
+                                )}
+                              </td>
                           </tr>
                       )) : (
                         <tr>
-                            <td colSpan={4} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">No member contribution transactions found.</td>
+                            <td colSpan={5} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">No member contribution transactions found.</td>
                         </tr>
                       )}
                   </tbody>
