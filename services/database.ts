@@ -364,6 +364,22 @@ class DatabaseService {
   getMembers(): User[] { return [...this.members]; }
   getTransactions(): Transaction[] { return [...this.transactions]; }
   
+  async getGroupContributionTransactions(groupId: string): Promise<Transaction[]> {
+    if (!this.isServerOnline) return [];
+    try {
+      const res = await fetch(`${API_BASE}/groups/${groupId}/transactions/contributions`, {
+        signal: AbortSignal.timeout(4000)
+      });
+      if (res.ok) {
+        const remoteTxs = await res.json();
+        return Array.isArray(remoteTxs) ? remoteTxs.map((t: any) => this.mapTransaction(t)) : [];
+      }
+    } catch (e) {
+      console.warn(`Failed to fetch contribution transactions for group ${groupId}:`, e);
+    }
+    return [];
+  }
+  
   async getGroupMessages(groupId?: string): Promise<GroupMessage[]> {
     const targetGroupId = groupId || this.groups[0]?.id;
     if (!targetGroupId) return this.messages;

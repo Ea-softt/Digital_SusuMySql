@@ -228,6 +228,24 @@ app.get('/api/users', async (req, res) => {
     }
 });
 
+// --- GET USER'S GROUPS ---
+app.get('/api/users/:userId/groups', async (req, res) => {
+    try {
+        const [rows] = await pool.query(
+            `SELECT sg.*, gm.role as membership_role, gm.status as membership_status, gm.joined_at
+             FROM savings_groups sg
+             JOIN group_memberships gm ON sg.id = gm.group_id
+             WHERE gm.user_id = ? AND gm.status != 'SUSPENDED'
+             ORDER BY gm.joined_at DESC`,
+            [req.params.userId]
+        );
+        res.json(rows);
+    } catch (error) {
+        console.error('GET /api/users/:userId/groups error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.get('/api/users/:email', async (req, res) => {
     try {
         const [rows] = await pool.query('SELECT * FROM users WHERE email = ?', [req.params.email]);
@@ -308,6 +326,19 @@ app.get('/api/transactions/:userId', async (req, res) => {
         const [rows] = await pool.query('SELECT * FROM transactions WHERE user_id = ? ORDER BY date DESC', [req.params.userId]);
         res.json(rows);
     } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/groups/:groupId/transactions/contributions', async (req, res) => {
+    try {
+        const [rows] = await pool.query(
+            'SELECT t.*, u.name as userName FROM transactions t JOIN users u ON t.user_id = u.id WHERE t.group_id = ? AND t.type = "CONTRIBUTION" ORDER BY t.date DESC',
+            [req.params.groupId]
+        );
+        res.json(rows);
+    } catch (error) {
+        console.error('GET /api/groups/:groupId/transactions/contributions error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -447,6 +478,8 @@ app.get('/api/group-memberships', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+
 
 app.listen(PORT, () => {
     console.log(`🚀 Digital Susu API active on http://localhost:${PORT}`);

@@ -74,7 +74,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   const [inviteInput, setInviteInput] = useState('');
   const [isInviting, setIsInviting] = useState(false);
 
-  const [groupMemberIds, setGroupMemberIds] = useState(new Set(group.payoutSchedule));
+  const [groupMemberIds, setGroupMemberIds] = useState(new Set<string>());
 
   useEffect(() => {
     if (!group?.id) return;
@@ -91,20 +91,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                             currentGroupMemberIds.add(m.user_id);
                         }
                     });
-
-                    // Fallback for safety, include anyone in payout schedule
-                    group.payoutSchedule.forEach(id => currentGroupMemberIds.add(id));
-
                     setGroupMemberIds(currentGroupMemberIds);
                 }
+            } else {
+                console.error("Failed to fetch group memberships:", response.statusText);
+                setGroupMemberIds(new Set<string>()); // Clear on failure
             }
         } catch (error) {
-            console.error("Could not fetch group memberships, falling back to payout schedule.", error);
+            console.error("Could not fetch group memberships.", error);
+            setGroupMemberIds(new Set<string>()); // Clear on error
         }
     };
 
     fetchGroupMembers();
-  }, [group?.id, group.payoutSchedule]);
+  }, [group?.id]);
 
   // --- Sync State ---
   useEffect(() => {
@@ -307,7 +307,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
       <div className="space-y-6 animate-fade-in">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatsCard title="Total Group Pool" value={moneyFormatter(group.totalPool, group.currency)} trend="Live Balance" trendUp={true} icon={DollarSign} color="bg-emerald-600" />
-          <StatsCard title="Active Members" value={activeMembers.length.toString()} trend={`${pendingMembers.length} New Requests`} trendUp={true} icon={Users} color="bg-blue-600" />
+          <StatsCard title="Active Members" value={activeMembers.length.toString()} trend={`${pendingMembers.length} Pending Members`} trendUp={true} icon={Users} color="bg-blue-600" />
           <StatsCard title="Collection Status" value={`${Math.round(collectionProgress)}%`} icon={CheckCircle} color="bg-purple-600" />
           <StatsCard title="Pending Actions" value={(pendingTransactions.length + pendingMembers.length).toString()} trend="Needs Review" trendUp={false} icon={AlertTriangle} color="bg-orange-500" />
         </div>
@@ -385,9 +385,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   };
 
   const renderMembers = () => {
-      // Show only members that belong to this group and match search term
-      const filteredMembers = members.filter(member => 
-          groupMemberIds.has(member.id) && 
+      // Filters the member list to show only active, joined members.
+      // It excludes superusers, members not part of the current group,
+      // and anyone whose status isn't 'ACTIVE'. Also filters by search term.
+      const filteredMembers = members.filter(member =>
+          member.role !== UserRole.SUPERUSER &&
+          groupMemberIds.has(member.id) &&
+          member.status === 'ACTIVE' &&
+          (member.name.toLowerCase().includes(searchTerm.toLowerCase()) || member.email.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
+
+      const pendingMembersForCurrentGroup = members.filter(member =>
+          member.role !== UserRole.SUPERUSER &&
+          groupMemberIds.has(member.id) &&
+          member.status === 'PENDING' &&
           (member.name.toLowerCase().includes(searchTerm.toLowerCase()) || member.email.toLowerCase().includes(searchTerm.toLowerCase()))
       );
       return (
@@ -395,7 +406,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
         <div className="bg-gradient-to-r from-gray-900 to-gray-800 rounded-xl p-6 text-white shadow-lg relative overflow-hidden">
             <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <div>
-                    <div className="flex items-center gap-2 mb-2 text-gray-300"><Wallet className="w-5 h-5" /><span className="text-sm font-medium uppercase tracking-wider">Leader Wallet</span></div>
+                    <div className="flex items-center gap-2 mb-2 text-gray-300"><Wallet className="w-5 h-5" /><span className="text-sm font-medium uppercase tracking-wider">Group Leader Wallet</span></div>
                     <h3 className="text-4xl font-bold mb-1">{moneyFormatter(walletBalance, group.currency)}</h3>
                     <p className="text-xs text-gray-400">Manage group transactions from here.</p>
                 </div>
@@ -411,7 +422,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input type="text" placeholder="Search members..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white" />
           </div>
-          <button onClick={() => setIsInviteModalOpen(true)} className="w-full sm:w-auto bg-primary-600 hover:bg-primary-700 text-white px-6 py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 shadow-md"><UserPlus className="w-4 h-4" /> Invite Member</button>
+          <button onClick={() => setIsInviteModalOpen(true)} className="w-full sm:w-auto bg-primary-600 hover:bg-primary-700 text-white px-6 py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 shadow-md"><UserPlus className="w-4 h-4" /> Invite New Member</button>
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
@@ -424,17 +435,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                     <td className="px-6 py-4"><span className={`px-2 py-1 rounded-full text-xs font-bold ${member.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{member.status}</span></td>
                     <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{member.joinDate}</td>
                     <td className="px-6 py-4">
-                        {member.status === 'PENDING' ? (
-                            <div className="flex gap-2">
-                                <button onClick={() => { setConfirmDialog({ isOpen: true, title: 'Approve Member', message: `Add ${member.name} to the group?`, type: 'primary', onConfirm: () => handleApproveMember(member.id) }); }} className="p-1 bg-green-100 text-green-700 rounded"><Check className="w-4 h-4" /></button>
-                                <button onClick={() => { setConfirmDialog({ isOpen: true, title: 'Reject Member', message: `Remove ${member.name}'s request?`, type: 'danger', onConfirm: () => handleRejectMember(member.id) }); }} className="p-1 bg-red-100 text-red-700 rounded"><X className="w-4 h-4" /></button>
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2">
                                 <div className="w-16 h-2 bg-gray-100 dark:bg-gray-600 rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{ width: `${member.reliabilityScore || 0}%` }}></div></div>
                                 <span className="text-xs text-gray-600">{member.reliabilityScore}%</span>
                             </div>
-                        )}
                     </td>
                     <td className="px-6 py-4 text-right"><button onClick={() => setViewMember(member)} className="p-2 text-gray-400 hover:text-primary-600"><Eye className="w-5 h-5" /></button></td>
                   </tr>
@@ -442,15 +446,56 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
               </tbody>
           </table>
         </div>
+
+        {pendingMembersForCurrentGroup.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden mt-8">
+                <h3 className="font-bold text-lg text-gray-900 dark:text-white px-6 py-4 border-b border-gray-100 dark:border-gray-700">Pending Members</h3>
+                <table className="w-full text-left text-sm">
+                    <thead className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                        <tr>
+                            <th className="px-6 py-4">Member</th>
+                            <th className="px-6 py-4">Status</th>
+                            <th className="px-6 py-4">Joined</th>
+                            <th className="px-6 py-4 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                        {pendingMembersForCurrentGroup.map(member => (
+                            <tr key={member.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                <td className="px-6 py-4">
+                                    <div className="flex items-center gap-3">
+                                        <img src={member.avatar} alt="" className="w-8 h-8 rounded-full" />
+                                        <div>
+                                            <p className="font-medium text-gray-900 dark:text-white">{member.name}</p>
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">{member.email}</p>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td className="px-6 py-4"><span className={`px-2 py-1 rounded-full text-xs font-bold bg-yellow-100 text-yellow-700`}>{member.status}</span></td>
+                                <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{member.joinDate}</td>
+                                <td className="px-6 py-4 text-right">
+                                    <div className="flex justify-end gap-2">
+                                        <button onClick={() => { setConfirmDialog({ isOpen: true, title: 'Approve Member', message: `Add ${member.name} to the group?`, type: 'primary', onConfirm: () => handleApproveMember(member.id) }); }} className="p-1 bg-green-100 text-green-700 rounded"><Check className="w-4 h-4" /></button>
+                                        <button onClick={() => { setConfirmDialog({ isOpen: true, title: 'Reject Member', message: `Remove ${member.name}'s request?`, type: 'danger', onConfirm: () => handleRejectMember(member.id) }); }} className="p-1 bg-red-100 text-red-700 rounded"><X className="w-4 h-4" /></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        )}
+
       </div>
       );
   };
 
   const renderTransactions = () => {
-    // Filter transactions to only show 'CONTRIBUTION' type
-    const filteredContributionTransactions = transactions.filter(tx => 
-        tx.type === 'CONTRIBUTION' && 
-        (tx.userName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    // Filter transactions to show 'CONTRIBUTION' type from members of the current group.
+    const filteredContributionTransactions = transactions.filter(tx =>
+        tx.type === 'CONTRIBUTION' &&
+        groupMemberIds.has(tx.userId) &&
+        (tx.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
          tx.type.toLowerCase().includes(searchTerm.toLowerCase())) // Also allow searching by type
     );
 
@@ -835,7 +880,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                 </div>
                  <div className="flex-shrink-0 p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex justify-end items-center gap-3">
                     <button onClick={() => handleSuspendMember(viewMember.id)} className="px-4 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg flex items-center gap-2"><Trash2 className="w-4 h-4"/> Suspend Member</button>
-                    <button className="px-4 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center gap-2"><UserCog className="w-4 h-4"/> Manage Roles</button>
+                    <button className="px-4 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center gap-2"><UserCog className="w-4 h-4"/> Manage Member Roles</button>
                 </div>
             </div>
         </div>
@@ -846,8 +891,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
     <div className="space-y-6">
         <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col md:flex-row justify-between items-center gap-4">
             <div>
-                <h2 className="text-xl font-bold text-gray-800 dark:text-white">{group.name}</h2>
-                <p className="text-gray-500 dark:text-gray-400 text-sm">Administrator Dashboard</p>
+                <h2 className="text-xl font-bold text-gray-800 dark:text-white">Group: {group.name}</h2>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">Group Administrator Dashboard</p>
             </div>
             
             <div className="flex items-center gap-2">
