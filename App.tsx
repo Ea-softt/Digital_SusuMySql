@@ -19,6 +19,7 @@ import { Lock, Mail, User as UserIcon, Wallet, Eye, EyeOff, CheckCircle, AlertCi
 type AuthMode = 'login' | 'register' | 'forgot' | '2fa';
 
 const SESSION_KEY = 'susu_auth_session_email';
+const LAST_GROUP_KEY = 'susu_last_active_group_id';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -156,7 +157,9 @@ const App: React.FC = () => {
     const groups = db.getGroupsForUser(user.id);
     setUserGroups(groups);
     if (groups.length > 0) {
-        setActiveGroup(groups[0]);
+        const lastGroupId = localStorage.getItem(LAST_GROUP_KEY);
+        const lastGroup = lastGroupId ? groups.find(g => g.id === lastGroupId) : null;
+        setActiveGroup(lastGroup || groups[0]); // Restore or fallback
         setCurrentView('dashboard');
     } else {
         setActiveGroup(null);
@@ -167,6 +170,7 @@ const App: React.FC = () => {
 
   const handleLogout = () => {
     localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(LAST_GROUP_KEY);
     setCurrentUser(null);
     setContextUser(null);
     setActiveGroup(null);
@@ -179,9 +183,11 @@ const App: React.FC = () => {
       if (group) {
           setActiveGroup(group);
           setCurrentView('dashboard');
+          localStorage.setItem(LAST_GROUP_KEY, group.id);
       } else {
           setActiveGroup(null);
           setCurrentView('join-group');
+          localStorage.removeItem(LAST_GROUP_KEY);
       }
   };
 
