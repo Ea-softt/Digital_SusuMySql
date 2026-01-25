@@ -1,5 +1,5 @@
 
-import { Group, Transaction, User, GroupMessage, UserRole, AuditLog, SystemConfig } from '../types'; 
+import { Group, Transaction, User, GroupMessage, UserRole, AuditLog, SystemConfig, GroupMembership } from '../types'; 
 
 const API_BASE = 'http://localhost:3001/api';
 
@@ -338,7 +338,7 @@ class DatabaseService {
     return { success: false, message: "System offline." };
   }
 
-  async addTransaction(transaction: Transaction): Promise<void> {
+  async addTransaction(transaction: Transaction, groupId?: string | null): Promise<void> {
     if (this.isServerOnline) {
         try {
             await fetch(`${API_BASE}/transactions`, {
@@ -350,7 +350,7 @@ class DatabaseService {
                     type: transaction.type,
                     amount: transaction.amount,
                     status: transaction.status,
-                    groupId: this.groups[0]?.id || null 
+                    groupId: groupId || null
                 })
             });
             await this.syncData(transaction.userId);

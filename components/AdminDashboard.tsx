@@ -45,6 +45,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   const [payoutModalOpen, setPayoutModalOpen] = useState(false);
   const [payoutDetails, setPayoutDetails] = useState<{recipient: User | undefined, amount: number} | null>(null);
 
+  const [isSplitPayoutModalOpen, setIsSplitPayoutModalOpen] = useState(false);
+  const [selectedMembersForPayout, setSelectedMembersForPayout] = useState<string[]>([]);
+  const [isProcessingSplitPayout, setIsProcessingSplitPayout] = useState(false);
+  const [payoutAmounts, setPayoutAmounts] = useState<{ [key: string]: string }>({});
+
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
     isOpen: false,
     title: '',
@@ -316,12 +321,112 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
               date: new Date().toISOString().split('T')[0],
               status: 'COMPLETED'
           };
-          await db.addTransaction(newTx);
+          await db.addTransaction(newTx, group.id);
           if (onRefresh) onRefresh();
           alert("Admin contribution recorded successfully.");
       } catch (err) {
           alert("Action failed.");
       }
+  };
+
+  const handleToggleMemberForPayout = (memberId: string) => {
+    const newSelected = selectedMembersForPayout.includes(memberId)
+        ? selectedMembersForPayout.filter(id => id !== memberId)
+        : [...selectedMembersForPayout, memberId];
+    
+    setSelectedMembersForPayout(newSelected);
+
+    if (newSelected.length > 0) {
+        const amountPerMember = (group.totalPool / newSelected.length).toFixed(2);
+        const newAmounts: { [key: string]: string } = {};
+        newSelected.forEach(id => {
+            newAmounts[id] = amountPerMember;
+        });
+        setPayoutAmounts(newAmounts);
+    } else {
+        setPayoutAmounts({});
+    }
+  };
+
+  const handlePayoutAmountChange = (memberId: string, amount: string) => {
+      setPayoutAmounts(prev => ({
+          ...prev,
+          [memberId]: amount
+      }));
+  };
+
+  const handleSplitPayout = async () => {
+      if (selectedMembersForPayout.length === 0) {
+          alert("Please select at least one member to distribute the payout to.");
+          return;
+      }
+
+      const totalPayoutAmount = Object.values(payoutAmounts).reduce((sum, amount) => sum + (parseFloat(amount) || 0), 0);
+      
+      if (Number(totalAllocated) > group.totalPool) {
+          alert("The total allocated amount cannot exceed the group pool.");
+          return;
+      }
+
+      if (totalPayoutAmount <= 0) {
+          alert("Please allocate a payout amount greater than zero.");
+          return;
+      }
+      
+      if (walletBalance < totalPayoutAmount) {
+          alert(`Insufficient funds for payout. Required: ${moneyFormatter(Number(totalPayoutAmount), group.currency)}, Wallet: ${moneyFormatter(walletBalance, group.currency)}`);
+          return;
+      }
+
+      setConfirmDialog({
+          isOpen: true,
+          title: 'Confirm Split Payout',
+          message: `Are you sure you want to distribute ${moneyFormatter(Number(totalPayoutAmount), group.currency)} between ${selectedMembersForPayout.length} members?`,
+          type: 'warning',
+          onConfirm: async () => {
+              setIsProcessingSplitPayout(true);
+              try {
+                  const payoutTransactions: Transaction[] = selectedMembersForPayout.map(memberId => {
+                      const member = members.find(m => m.id === memberId);
+                      const amount = parseFloat(payoutAmounts[memberId]) || 0;
+                      
+                      if (!member || amount <= 0) return null;
+
+                      return {
+                          id: `tx-p-split-${Date.now()}-${memberId}`,
+                          userId: member.id,
+                          userName: member.name,
+                          type: 'PAYOUT',
+                          amount: amount,
+                          date: new Date().toISOString().split('T')[0],
+                          status: 'COMPLETED'
+                      };
+                  }).filter((tx): tx is Transaction => tx !== null);
+                  
+                  if(payoutTransactions.length === 0) {
+                      throw new Error("No valid payouts to process.");
+                  }
+
+                  for (const tx of payoutTransactions) {
+                      await db.addTransaction(tx, group.id);
+                  }
+
+                  await db.updateGroup(group.id, { ...group, totalPool: group.totalPool - Number(totalPayoutAmount) });
+
+                  alert(`Payout successful! ${moneyFormatter(Number(totalPayoutAmount), group.currency)} distributed among ${payoutTransactions.length} members.`);
+                  if (onRefresh) onRefresh();
+                  
+                  setIsSplitPayoutModalOpen(false);
+                  setSelectedMembersForPayout([]);
+
+              } catch (err) {
+                  alert(`Payout failed: ${err instanceof Error ? err.message : 'An unknown error occurred.'}`);
+              } finally {
+                  setIsProcessingSplitPayout(false);
+                  setConfirmDialog(prev => ({...prev, isOpen: false}));
+              }
+          }
+      });
   };
 
   const copyLink = () => {
@@ -433,19 +538,71 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
           member.status === 'PENDING' &&
           (member.name.toLowerCase().includes(searchTerm.toLowerCase()) || member.email.toLowerCase().includes(searchTerm.toLowerCase()))
       );
+      
+      const payoutHistory = transactions.filter(t => t.type === 'PAYOUT' && t.status === 'COMPLETED').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
       return (
       <div className="space-y-6 animate-fade-in">
-        <div className="bg-gradient-to-r from-gray-900 to-gray-800 rounded-xl p-6 text-white shadow-lg relative overflow-hidden">
-            <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                <div>
-                    <div className="flex items-center gap-2 mb-2 text-gray-300"><Wallet className="w-5 h-5" /><span className="text-sm font-medium uppercase tracking-wider">Group Leader Wallet</span></div>
-                    <h3 className="text-4xl font-bold mb-1">{moneyFormatter(walletBalance, group.currency)}</h3>
-                    <p className="text-xs text-gray-400">Manage group transactions from here.</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Card 1: Member Contributions */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-100 dark:border-gray-700 shadow-sm">
+                <div className="flex items-center gap-3 mb-2">
+                    <Users className="w-6 h-6 text-blue-500" />
+                    <h4 className="text-lg font-bold text-gray-800 dark:text-white">Member Contributions</h4>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-                     <button onClick={() => setWalletModalOpen(true)} className="px-6 py-3 bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/10 rounded-lg font-bold transition-all flex items-center justify-center gap-2"><Smartphone className="w-4 h-4" /> Load Wallet</button>
-                     <button onClick={handleAdminContribution} className="px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-bold shadow-lg transition-all flex items-center justify-center gap-2"><DollarSign className="w-4 h-4" /> Pay Contribution</button>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{moneyFormatter(group.totalPool, group.currency)}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Total funds collected from members for the current cycle.</p>
+                <div className="mt-4">
+                    <button 
+                        onClick={() => setIsSplitPayoutModalOpen(true)}
+                        disabled={group.totalPool <= 0}
+                        className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <Shuffle className="w-4 h-4" /> Distribute Payout
+                    </button>
                 </div>
+            </div>
+
+            {/* Card 2: Leader Wallet */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-100 dark:border-gray-700 shadow-sm">
+                <div className="flex items-center gap-3 mb-2">
+                    <Wallet className="w-6 h-6 text-green-500" />
+                    <h4 className="text-lg font-bold text-gray-800 dark:text-white">Group Leader Wallet</h4>
+                </div>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{moneyFormatter(walletBalance, group.currency)}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Your personal funds to manage group payments.</p>
+                <div className="mt-4 flex flex-col sm:flex-row gap-3">
+                     <button onClick={() => setWalletModalOpen(true)} className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg font-bold flex items-center justify-center gap-2"><Smartphone className="w-4 h-4" /> Load Wallet</button>
+                     <button onClick={handleAdminContribution} className="flex-1 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-bold flex items-center justify-center gap-2"><DollarSign className="w-4 h-4" /> Pay My Share</button>
+                </div>
+            </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+            <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-6 flex items-center gap-2"><History className="w-5 h-5 text-gray-400"/> Payout History</h3>
+            <div className="space-y-4">
+              {payoutHistory.length > 0 ? payoutHistory.map(tx => (
+                 <div key={tx.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                   <div className="flex items-center gap-3">
+                     <div className={`p-2 rounded-full ${tx.status === 'COMPLETED' ? 'bg-green-100 dark:bg-green-900' : 'bg-yellow-100'}`}>
+                       <ArrowUpRight className={`w-4 h-4 ${tx.status === 'COMPLETED' ? 'text-green-600' : 'text-yellow-600'}`} />
+                     </div>
+                     <div>
+                       <p className="font-medium text-gray-900 dark:text-white">{tx.userName}</p>
+                       <p className="text-xs text-gray-500 dark:text-gray-400">{new Date(tx.date).toLocaleDateString()}</p>
+                     </div>
+                   </div>
+                   <div className="text-right">
+                     <p className="font-bold text-gray-800 dark:text-gray-200">{moneyFormatter(tx.amount, group.currency)}</p>
+                     <p className="text-xs text-green-600 dark:text-green-400 font-medium">{tx.status}</p>
+                   </div>
+                 </div>
+              )) : (
+                <div className="text-center py-8 text-gray-500">
+                  <FileDown className="w-8 h-8 mx-auto mb-2 text-gray-400"/>
+                  No payouts have been made in this cycle yet.
+                </div>
+              )}
             </div>
         </div>
 
@@ -525,13 +682,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   const renderTransactions = () => {
     // Now uses dedicated state for group contributions, simplifying the filter.
     const filteredContributionTransactions = groupContributionTransactions.filter(tx =>
-        tx.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        tx.type.toLowerCase().includes(searchTerm.toLowerCase())
+        tx.userName.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    // Filter transactions for the current administrator
+    // Filter transactions for the current administrator, excluding contributions which are now in the main table
     const adminPersonalTransactions = transactions.filter(tx =>
         tx.userId === currentUser.id &&
+        tx.type !== 'CONTRIBUTION' &&
         (tx.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
          tx.type.toLowerCase().includes(searchTerm.toLowerCase()))
     ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()); // Sort by date descending
@@ -677,7 +834,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                         status: 'COMPLETED'
                     };
 
-                    await db.addTransaction(newTx);
+                    await db.addTransaction(newTx, group.id);
                     
                     await db.updateGroup(group.id, { ...group, totalPool: 0 });
 
@@ -842,6 +999,104 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
     });
   };
 
+  const renderSplitPayoutModal = () => {
+    if (!isSplitPayoutModalOpen) return null;
+
+    const activeMembersForPayout = members.filter(member =>
+        member.role !== UserRole.SUPERUSER &&
+        groupMemberIds.has(member.id) &&
+        member.status === 'ACTIVE'
+    );
+    
+    const totalAllocated = Object.values(payoutAmounts).reduce((sum, amount) => sum + Number(amount || 0), 0);
+    const remainder = group.totalPool - totalAllocated;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl h-[80vh] flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700">
+                <div className="flex-shrink-0 p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-800">
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                        <Shuffle className="w-6 h-6 text-primary-600"/>
+                        Distribute Group Payout
+                    </h3>
+                    <button onClick={() => { setIsSplitPayoutModalOpen(false); setSelectedMembersForPayout([]); }} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+                        <X className="w-5 h-5 text-gray-500"/>
+                    </button>
+                </div>
+                <div className="flex-grow overflow-y-auto p-6 space-y-4">
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                         <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-700">
+                            <p className="text-sm text-blue-600 dark:text-blue-300">Total Pool</p>
+                            <p className="text-2xl font-bold text-blue-800 dark:text-blue-200">{moneyFormatter(group.totalPool, group.currency)}</p>
+                        </div>
+                        <div className={`p-3 rounded-lg border ${Number(totalAllocated) > group.totalPool ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700' : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700'}`}>
+                            <p className={`text-sm ${Number(totalAllocated) > group.totalPool ? 'text-red-600 dark:text-red-300' : 'text-green-600 dark:text-green-300'}`}>Total Allocated</p>
+                            <p className={`text-2xl font-bold ${Number(totalAllocated) > group.totalPool ? 'text-red-800 dark:text-red-200' : 'text-green-800 dark:text-green-200'}`}>{moneyFormatter(totalAllocated, group.currency)}</p>
+                        </div>
+                         <div className="bg-gray-50 dark:bg-gray-900/20 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+                            <p className="text-sm text-gray-600 dark:text-gray-300">Remainder</p>
+                            <p className={`text-2xl font-bold ${remainder < 0 ? 'text-red-500' : 'text-gray-800 dark:text-gray-200'}`}>{moneyFormatter(remainder, group.currency)}</p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div className="flex justify-between items-center mb-2">
+                             <h4 className="font-bold text-gray-800 dark:text-gray-200">Select Members ({selectedMembersForPayout.length} selected)</h4>
+                             <button 
+                                onClick={() => setSelectedMembersForPayout(activeMembersForPayout.map(m => m.id))}
+                                className="text-sm font-medium text-primary-600 hover:underline"
+                            >
+                                Select All
+                            </button>
+                        </div>
+                       
+                        <div className="max-h-[300px] overflow-y-auto space-y-2 border rounded-lg p-2 bg-gray-50 dark:bg-gray-700/50">
+                            {activeMembersForPayout.map(member => (
+                                <div key={member.id} className={`flex items-center gap-3 p-2 rounded-lg transition-colors ${selectedMembersForPayout.includes(member.id) ? 'bg-blue-50 dark:bg-blue-900/10' : 'hover:bg-gray-100 dark:hover:bg-gray-600'}`}>
+                                    <input 
+                                        type="checkbox"
+                                        id={`member-payout-${member.id}`}
+                                        checked={selectedMembersForPayout.includes(member.id)}
+                                        onChange={() => handleToggleMemberForPayout(member.id)}
+                                        className="h-5 w-5 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                                    />
+                                    <label htmlFor={`member-payout-${member.id}`} className="flex-1 flex items-center gap-3 cursor-pointer">
+                                        <img src={member.avatar} alt={member.name} className="w-8 h-8 rounded-full" />
+                                        <span className="font-medium text-gray-800 dark:text-gray-200">{member.name}</span>
+                                    </label>
+                                     {selectedMembersForPayout.includes(member.id) && (
+                                        <div className="relative">
+                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">{group.currency}</span>
+                                             <input 
+                                                type="number"
+                                                value={payoutAmounts[member.id] || ''}
+                                                onChange={(e) => handlePayoutAmountChange(member.id, e.target.value)}
+                                                className="w-40 pl-10 pr-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-right font-semibold"
+                                                placeholder="0.00"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+                 <div className="flex-shrink-0 p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex justify-end items-center gap-3">
+                    <button onClick={() => { setIsSplitPayoutModalOpen(false); setSelectedMembersForPayout([]); }} className="px-4 py-2 text-sm font-bold text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded-lg">Cancel</button>
+                    <button 
+                        onClick={handleSplitPayout} 
+                        disabled={isProcessingSplitPayout || selectedMembersForPayout.length === 0 || totalAllocated <= 0 || totalAllocated > group.totalPool}
+                        className="px-4 py-2 text-sm font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-lg flex items-center gap-2 disabled:opacity-50"
+                    >
+                         {isProcessingSplitPayout ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4"/>}
+                         {isProcessingSplitPayout ? 'Processing...' : `Distribute to ${selectedMembersForPayout.length} members`}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+  };
+
   const renderMemberDetailsModal = () => {
     if (!viewMember) return null;
 
@@ -984,6 +1239,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
 
         {/* --- Modals --- */}
         
+        {renderSplitPayoutModal()}
         {viewMember && renderMemberDetailsModal()}
 
         {isHelpCenterOpen && (
