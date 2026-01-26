@@ -39,6 +39,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   const [group, setGroup] = useState(initialGroup);
   const [payoutOrder, setPayoutOrder] = useState(initialGroup.payoutSchedule);
   
+  const totalPoolNumber = useMemo(() => Number(group?.totalPool || 0), [group?.totalPool]);
+
   const [autoPayoutEnabled, setAutoPayoutEnabled] = useState(true);
   const [isProcessingPayout, setIsProcessingPayout] = useState(false);
   
@@ -151,7 +153,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   const pendingTransactions = transactions.filter(t => t.status === 'PENDING' && t.type === 'CONTRIBUTION');
   
   const cycleTarget = activeMembers.length * group.contributionAmount;
-  const collectionProgress = Math.min((group.totalPool / (cycleTarget || 1)) * 100, 100);
+  const collectionProgress = Math.min((totalPoolNumber / (cycleTarget || 1)) * 100, 100);
 
   // --- ASYNC HANDLERS FOR MYSQL ---
 
@@ -337,7 +339,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
     setSelectedMembersForPayout(newSelected);
 
     if (newSelected.length > 0) {
-        const amountPerMember = (group.totalPool / newSelected.length).toFixed(2);
+        const amountPerMember = (totalPoolNumber / newSelected.length).toFixed(2);
         const newAmounts: { [key: string]: string } = {};
         newSelected.forEach(id => {
             newAmounts[id] = amountPerMember;
@@ -361,20 +363,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
           return;
       }
 
-      const totalPayoutAmount = Object.values(payoutAmounts).reduce((sum, amount) => sum + (parseFloat(amount) || 0), 0);
+      const totalPayoutAmount = Object.values(payoutAmounts).reduce((sum, amount: string) => sum + (parseFloat(amount) || 0), 0);
       
-      if (Number(totalAllocated) > group.totalPool) {
+      if (totalPayoutAmount > totalPoolNumber) {
           alert("The total allocated amount cannot exceed the group pool.");
           return;
       }
 
       if (totalPayoutAmount <= 0) {
           alert("Please allocate a payout amount greater than zero.");
-          return;
-      }
-      
-      if (walletBalance < totalPayoutAmount) {
-          alert(`Insufficient funds for payout. Required: ${moneyFormatter(Number(totalPayoutAmount), group.currency)}, Wallet: ${moneyFormatter(walletBalance, group.currency)}`);
           return;
       }
 
@@ -411,7 +408,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                       await db.addTransaction(tx, group.id);
                   }
 
-                  await db.updateGroup(group.id, { ...group, totalPool: group.totalPool - Number(totalPayoutAmount) });
+                  await db.updateGroup(group.id, { ...group, totalPool: totalPoolNumber - Number(totalPayoutAmount) });
 
                   alert(`Payout successful! ${moneyFormatter(Number(totalPayoutAmount), group.currency)} distributed among ${payoutTransactions.length} members.`);
                   if (onRefresh) onRefresh();
@@ -1008,7 +1005,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
         member.status === 'ACTIVE'
     );
     
-    const totalAllocated = Object.values(payoutAmounts).reduce((sum, amount) => sum + Number(amount || 0), 0);
+    const totalAllocated = Object.values(payoutAmounts).reduce((sum, amount: string) => sum + Number(amount || 0), 0);
     const remainder = group.totalPool - totalAllocated;
 
     return (
