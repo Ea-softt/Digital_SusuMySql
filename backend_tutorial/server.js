@@ -20,7 +20,7 @@ app.use((req, res, next) => {
 const dbConfig = {
     host: process.env.DB_HOST || 'localhost',
     user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASS || 'password', 
+    password: process.env.DB_PASS || '', 
     database: process.env.DB_NAME || 'digital_susu_db',
     waitForConnections: true,
     connectionLimit: 10,
