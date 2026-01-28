@@ -82,7 +82,8 @@ class DatabaseService {
       welcomeMessage: g.welcome_message || '',
       icon: this.isValidImage(g.icon) ? g.icon : '', 
       payoutSchedule: schedule, 
-      reminderDaysBefore: 3
+      reminderDaysBefore: 3,
+      status: g.status || 'ACTIVE'
     };
   }
 
@@ -260,7 +261,8 @@ class DatabaseService {
       inviteCode: data.inviteCode || `SUSU-${Math.floor(1000 + Math.random() * 9000)}`,
       welcomeMessage: data.welcomeMessage || '',
       icon: data.icon || '',
-      creatorId: data.creatorId
+      creatorId: data.creatorId,
+      status: 'PENDING_VERIFICATION'
     };
 
     if (this.isServerOnline) {
@@ -282,7 +284,8 @@ class DatabaseService {
         invite_code: newGroupData.inviteCode,
         icon: newGroupData.icon,
         total_pool: 0,
-        members_count: 1
+        members_count: 1,
+        status: newGroupData.status
     });
   }
 
@@ -315,6 +318,23 @@ class DatabaseService {
         }
     }
     throw new Error("Server is offline. Cannot update group settings.");
+  }
+
+  async updateGroupStatus(groupId: string, status: 'ACTIVE' | 'REJECTED'): Promise<Group | null> {
+    if (this.isServerOnline) {
+        try {
+            const res = await fetch(`${API_BASE}/groups/${groupId}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status })
+            });
+            if (res.ok) {
+                await this.syncData();
+                return this.groups.find(g => g.id === groupId) || null;
+            }
+        } catch (e) {}
+    }
+    return null;
   }
 
   async joinGroupRequest(userId: string, inviteCode: string): Promise<{ success: boolean, message: string }> {

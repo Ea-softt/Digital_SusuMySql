@@ -292,6 +292,8 @@ const App: React.FC = () => {
         );
     }
 
+    const canCreateGroup = currentUser.role === UserRole.ADMIN && userGroups.length === 0;
+
     return (
       <Layout currentUser={contextUser || currentUser} onLogout={handleLogout} currentView={currentView} onNavigate={setCurrentView} isDarkMode={isDarkMode} toggleDarkMode={() => setIsDarkMode(!isDarkMode)} activeGroup={activeGroup} userGroups={userGroups} onSwitchGroup={handleGroupSwitch}>
         {/* Navigation Views */}
@@ -301,7 +303,7 @@ const App: React.FC = () => {
                 {contextUser.role === UserRole.ADMIN && <AdminDashboard group={activeGroup} transactions={dbTransactions} members={dbMembers} currentUser={contextUser} onRefresh={refreshData} initialTab="overview" />}
             </>
         )}
-        {currentView === 'join-group' && <JoinGroup userId={currentUser.id} onSuccess={refreshData} onCancel={userGroups.length > 0 ? () => handleGroupSwitch(userGroups[0]) : undefined} />}
+        {currentView === 'join-group' && <JoinGroup userId={currentUser.id} onSuccess={refreshData} onCancel={userGroups.length > 0 ? () => handleGroupSwitch(userGroups[0]) : undefined} canCreateGroup={canCreateGroup} />}
         {currentView === 'help' && <HelpCenter />}
         {currentView === 'ai-help' && <AIHelpCenter />}
         {currentView === 'chat' && activeGroup && <GroupChat currentUser={contextUser || currentUser} />}

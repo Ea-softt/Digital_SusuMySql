@@ -98,6 +98,7 @@ export interface Group {
   reminderDaysBefore: number; 
   welcomeMessage?: string;
   icon?: string;
+  status: 'ACTIVE' | 'PENDING_VERIFICATION' | 'REJECTED';
 }
 
 // Any money movement is a Transaction

@@ -102,6 +102,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
         icon: ''
   });
   const [isEditingGroup, setIsEditingGroup] = useState(false);
+  const [groupActionConfirm, setGroupActionConfirm] = useState<{ group: Group; action: 'approve' | 'reject' } | null>(null);
 
   // Invite User State
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -1005,8 +1006,45 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   };
 
   const renderGroups = () => {
+    const pendingGroups = groups.filter(g => g.status === 'PENDING_VERIFICATION');
+
     return (
         <div className="space-y-6 animate-fade-in">
+             {pendingGroups.length > 0 && (
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-yellow-200 dark:border-yellow-800 overflow-hidden">
+                    <h3 className="font-bold text-lg text-yellow-800 dark:text-yellow-200 px-6 py-4 border-b border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20">Pending Group Verifications</h3>
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300">
+                            <tr>
+                                <th className="px-6 py-4">Group Name</th>
+                                <th className="px-6 py-4">Creator</th>
+                                <th className="px-6 py-4">Amount</th>
+                                <th className="px-6 py-4 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-yellow-100 dark:divide-yellow-800">
+                            {pendingGroups.map(group => {
+                                // This is a simplification. In a real app, you'd fetch the creator's name.
+                                const creator = members.find(m => m.role === 'ADMIN');
+                                return (
+                                    <tr key={group.id}>
+                                        <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{group.name}</td>
+                                        <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{creator?.name || 'Unknown Admin'}</td>
+                                        <td className="px-6 py-4">{moneyFormatter(group.contributionAmount, group.currency)}</td>
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex justify-end gap-2">
+                                                <button onClick={() => setGroupActionConfirm({ group, action: 'approve' })} className="p-1 bg-green-100 text-green-700 rounded"><CheckCircle className="w-4 h-4" /></button>
+                                                <button onClick={() => setGroupActionConfirm({ group, action: 'reject' })} className="p-1 bg-red-100 text-red-700 rounded"><XCircle className="w-4 h-4" /></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+             )}
+
              <div className="flex justify-between items-center bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
                 <h3 className="font-bold text-gray-900 dark:text-white">Active Saving Groups</h3>
                 <button 
