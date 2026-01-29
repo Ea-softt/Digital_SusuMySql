@@ -372,6 +372,57 @@ app.post('/api/group-messages', async (req, res) => {
     }
 });
 
+app.post('/api/groups/join', async (req, res) => {
+    const { userId, inviteCode } = req.body;
+    if (!userId || !inviteCode) {
+        return res.status(400).json({ message: "User ID and invite code are required." });
+    }
+
+    const connection = await pool.getConnection();
+    try {
+        const [groups] = await connection.query(
+            'SELECT id FROM savings_groups WHERE invite_code = ?',
+            [inviteCode]
+        );
+
+        if (groups.length === 0) {
+            return res.status(404).json({ message: "Group with this invite code not found." });
+        }
+        const groupId = groups[0].id;
+
+        const [existing] = await connection.query(
+            'SELECT * FROM group_memberships WHERE user_id = ? AND group_id = ?',
+            [userId, groupId]
+        );
+
+        if (existing.length > 0) {
+            if (existing[0].status !== 'ACTIVE') {
+                 await connection.query(
+                    'UPDATE group_memberships SET status = \'ACTIVE\' WHERE user_id = ? AND group_id = ?',
+                    [userId, groupId]
+                );
+            }
+        } else {
+            await connection.query(
+                'INSERT INTO group_memberships (user_id, group_id, role, status) VALUES (?, ?, \'MEMBER\', \'ACTIVE\')',
+                [userId, groupId]
+            );
+        }
+        
+        await connection.query(
+            `UPDATE savings_groups SET members_count = (SELECT COUNT(*) FROM group_memberships WHERE group_id = ? AND status = 'ACTIVE') WHERE id = ?`,
+            [groupId, groupId]
+        );
+
+        res.json({ success: true, message: "Successfully joined group." });
+    } catch (error) {
+        console.error('POST /api/groups/join error:', error);
+        res.status(500).json({ error: error.message });
+    } finally {
+        connection.release();
+    }
+});
+
 // --- GROUP MEMBERSHIP MANAGEMENT API ---
 
 app.get('/api/group-membership/status/:userId/:groupId', async (req, res) => {

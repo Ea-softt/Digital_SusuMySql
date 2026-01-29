@@ -1,7 +1,7 @@
 
 import { Group, Transaction, User, GroupMessage, UserRole, AuditLog, SystemConfig, GroupMembership } from '../types'; 
 
-const API_BASE = 'http://localhost:3001/api';
+const API_BASE = '/api';
 
 /**
  * PRODUCTION DATABASE SERVICE
