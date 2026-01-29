@@ -112,7 +112,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
               date: new Date().toISOString().split('T')[0],
               status: 'COMPLETED'
           };
-          await db.addTransaction(newTx);
+          await db.addTransaction(newTx, group.id);
           if (onRefresh) onRefresh();
           alert(`Successfully contributed ${group.currency} ${group.contributionAmount}!`);
       } catch (err) {
