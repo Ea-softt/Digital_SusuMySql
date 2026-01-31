@@ -801,16 +801,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
 
   const renderPayouts = () => {
     const paidUserIds = new Set(payoutHistory.map(t => t.userId));
-    
-    const membersWhoHaveReceived = members.filter(m => paidUserIds.has(m.id));
-    const membersYetToReceive = payoutOrder.map(userId => members.find(m => m.id === userId)).filter((m): m is User => !!m && !paidUserIds.has(m.id));
+    const activeMemberIds = new Set(members.filter(m => groupMemberIds.has(m.id) && m.status === 'ACTIVE' && m.role !== UserRole.SUPERUSER).map(m => m.id));
 
-    let nextUserIndex = payoutOrder.findIndex(userId => !paidUserIds.has(userId));
-    if (nextUserIndex === -1 && payoutOrder.length > 0) {
-        nextUserIndex = payoutOrder.length; 
-    }
+    // Filter the original payoutOrder to include only users who are still active members.
+    const validPayoutOrder = payoutOrder.filter(userId => activeMemberIds.has(userId));
 
-    const nextRecipient = members.find(m => m.id === payoutOrder[nextUserIndex]);
+    const membersWhoHaveReceived = members.filter(m => paidUserIds.has(m.id) && activeMemberIds.has(m.id));
+    const membersYetToReceive = members.filter(m => activeMemberIds.has(m.id) && !paidUserIds.has(m.id));
+
+    // Find the next recipient from the valid, filtered payout order.
+    const nextRecipientId = validPayoutOrder.find(userId => !paidUserIds.has(userId));
+    const nextRecipient = nextRecipientId ? members.find(m => m.id === nextRecipientId) : undefined;
     
     const handleManualPayout = async () => {
         if (!nextRecipient) {
