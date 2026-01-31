@@ -400,6 +400,23 @@ class DatabaseService {
     return [];
   }
   
+  async getGroupPayoutTransactions(groupId: string): Promise<Transaction[]> {
+    if (!this.isServerOnline) return [];
+    try {
+      // NOTE: This assumes a new backend endpoint exists to fetch all payout transactions for a group.
+      const res = await fetch(`${API_BASE}/groups/${groupId}/transactions/payouts`, {
+        signal: AbortSignal.timeout(4000)
+      });
+      if (res.ok) {
+        const remoteTxs = await res.json();
+        return Array.isArray(remoteTxs) ? remoteTxs.map((t: any) => this.mapTransaction(t)) : [];
+      }
+    } catch (e) {
+      console.warn(`Failed to fetch payout transactions for group ${groupId}:`, e);
+    }
+    return [];
+  }
+  
   async getGroupMessages(groupId?: string): Promise<GroupMessage[]> {
     const targetGroupId = groupId || this.groups[0]?.id;
     if (!targetGroupId) return this.messages;

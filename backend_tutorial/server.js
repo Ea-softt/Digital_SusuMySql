@@ -343,6 +343,19 @@ app.get('/api/groups/:groupId/transactions/contributions', async (req, res) => {
     }
 });
 
+app.get('/api/groups/:groupId/transactions/payouts', async (req, res) => {
+    try {
+        const [rows] = await pool.query(
+            'SELECT t.*, u.name as userName FROM transactions t LEFT JOIN users u ON t.user_id = u.id WHERE t.group_id = ? AND t.type = "PAYOUT" ORDER BY t.date DESC',
+            [req.params.groupId]
+        );
+        res.json(rows);
+    } catch (error) {
+        console.error('GET /api/groups/:groupId/transactions/payouts error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // --- GROUP CHAT MESSAGES API ---
 
 app.get('/api/group-messages/:groupId', async (req, res) => {

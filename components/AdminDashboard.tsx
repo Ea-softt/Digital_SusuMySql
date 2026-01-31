@@ -74,6 +74,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   const [selectedRole, setSelectedRole] = useState<UserRole>(UserRole.MEMBER);
 
   const [groupContributionTransactions, setGroupContributionTransactions] = useState<Transaction[]>([]);
+  const [payoutHistory, setPayoutHistory] = useState<Transaction[]>([]);
+
+  useEffect(() => {
+    const fetchPayoutHistory = async () => {
+      if (group?.id) {
+        try {
+          const payouts = await db.getGroupPayoutTransactions(group.id);
+          setPayoutHistory(payouts);
+        } catch (error) {
+          console.error("Failed to fetch payout history:", error);
+          setPayoutHistory([]);
+        }
+      }
+    };
+    fetchPayoutHistory();
+  }, [group?.id, onRefresh]);
 
   useEffect(() => {
     const fetchGroupContributions = async () => {
@@ -536,8 +552,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
           (member.name.toLowerCase().includes(searchTerm.toLowerCase()) || member.email.toLowerCase().includes(searchTerm.toLowerCase()))
       );
       
-      const payoutHistory = transactions.filter(t => t.type === 'PAYOUT' && t.status === 'COMPLETED').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
       return (
       <div className="space-y-6 animate-fade-in">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -786,7 +800,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   );
 
   const renderPayouts = () => {
-    const payoutHistory = transactions.filter(t => t.type === 'PAYOUT' && t.status === 'COMPLETED').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     const paidUserIds = new Set(payoutHistory.map(t => t.userId));
     
     const membersWhoHaveReceived = members.filter(m => paidUserIds.has(m.id));
