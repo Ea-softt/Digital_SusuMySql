@@ -813,6 +813,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
     const nextRecipientId = validPayoutOrder.find(userId => !paidUserIds.has(userId));
     const nextRecipient = nextRecipientId ? members.find(m => m.id === nextRecipientId) : undefined;
     
+    const nextUserIndex = payoutOrder.findIndex(userId => !paidUserIds.has(userId));
+    
     const handleManualPayout = async () => {
         if (!nextRecipient) {
             alert("No one is scheduled for the next payout.");
