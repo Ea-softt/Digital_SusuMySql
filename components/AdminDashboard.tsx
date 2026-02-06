@@ -76,7 +76,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   const [isStartingNewCycle, setIsStartingNewCycle] = useState(false);
 
   const [groupContributionTransactions, setGroupContributionTransactions] = useState<Transaction[]>([]);
-  const [payoutHistory, setPayoutHistory] = useState<Transaction[]>([]);
+  const [currentCyclePayoutHistory, setCurrentCyclePayoutHistory] = useState<Transaction[]>([]);
+  const [allTimePayoutHistory, setAllTimePayoutHistory] = useState<Transaction[]>([]);
   const [memberIdSet, setMemberIdSet] = useState(new Set<string>());
 
   useEffect(() => {
@@ -113,11 +114,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
     const fetchPayoutHistory = async () => {
       if (group?.id) {
         try {
-          const payouts = await db.getGroupPayoutTransactions(group.id);
-          setPayoutHistory(payouts);
+          const currentPayouts = await db.getGroupPayoutTransactions(group.id);
+          setCurrentCyclePayoutHistory(currentPayouts);
+
+          // Merge current payouts into all-time history without duplicates.
+          setAllTimePayoutHistory(prevHistory => {
+            const newHistory = [...prevHistory];
+            const existingIds = new Set(newHistory.map(t => t.id));
+            for (const p of currentPayouts) {
+              if (!existingIds.has(p.id)) {
+                newHistory.push(p);
+              }
+            }
+            // Sort by date to keep it consistent
+            return newHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          });
+
         } catch (error) {
           console.error("Failed to fetch payout history:", error);
-          setPayoutHistory([]);
+          setCurrentCyclePayoutHistory([]);
         }
       }
     };
@@ -608,7 +623,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
             <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-6 flex items-center gap-2"><History className="w-5 h-5 text-gray-400"/> Payout History</h3>
             <div className="space-y-4">
-              {payoutHistory.length > 0 ? payoutHistory.map(tx => (
+              {allTimePayoutHistory.length > 0 ? allTimePayoutHistory.map(tx => (
                  <div key={tx.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                    <div className="flex items-center gap-3">
                      <div className={`p-2 rounded-full ${tx.status === 'COMPLETED' ? 'bg-green-100 dark:bg-green-900' : 'bg-yellow-100'}`}>
@@ -823,7 +838,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
     const activeMemberIds = new Set(activeMembersInCycle.map(m => m.id));
 
     // 2. Get a set of user IDs who have already been paid in this cycle from payout history.
-    const paidUserIds = new Set(payoutHistory.map(t => t.userId));
+    const paidUserIds = new Set(currentCyclePayoutHistory.map(t => t.userId));
 
     // 3. Create lists of members who have and have not received their payout.
     const membersWhoHaveReceived = activeMembersInCycle.filter(m => paidUserIds.has(m.id));
@@ -1006,7 +1021,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
             <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                 <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-6 flex items-center gap-2"><History className="w-5 h-5 text-gray-400"/> Payout History</h3>
                 <div className="space-y-4">
-                  {payoutHistory.length > 0 ? payoutHistory.map(tx => (
+                  {allTimePayoutHistory.length > 0 ? allTimePayoutHistory.map(tx => (
                      <div key={tx.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                        <div className="flex items-center gap-3">
                          <div className={`p-2 rounded-full ${tx.status === 'COMPLETED' ? 'bg-green-100 dark:bg-green-900' : 'bg-yellow-100'}`}>
