@@ -73,8 +73,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<UserRole>(UserRole.MEMBER);
 
+  const [isStartingNewCycle, setIsStartingNewCycle] = useState(false);
+
   const [groupContributionTransactions, setGroupContributionTransactions] = useState<Transaction[]>([]);
   const [payoutHistory, setPayoutHistory] = useState<Transaction[]>([]);
+  const [memberIdSet, setMemberIdSet] = useState(new Set<string>());
+
+  useEffect(() => {
+    if (!group?.id) return;
+
+    const fetchGroupMembers = async () => {
+        try {
+            const response = await fetch(`http://localhost:3001/api/group-memberships`);
+            if (response.ok) {
+                const allMemberships = await response.json();
+                if (Array.isArray(allMemberships)) {
+                    const currentMemberIds = new Set<string>();
+                    allMemberships.forEach((m: any) => {
+                        if (m.group_id === group.id) {
+                            currentMemberIds.add(m.user_id);
+                        }
+                    });
+                    setMemberIdSet(currentMemberIds);
+                }
+            } else {
+                console.error("Failed to fetch group memberships:", response.statusText);
+                setMemberIdSet(new Set<string>()); // Clear on failure
+            }
+        } catch (error) {
+            console.error("Could not fetch group memberships.", error);
+            setMemberIdSet(new Set<string>()); // Clear on error
+        }
+    };
+
+    fetchGroupMembers();
+  }, [group?.id]);
 
   useEffect(() => {
     const fetchPayoutHistory = async () => {
@@ -114,38 +147,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [inviteInput, setInviteInput] = useState('');
   const [isInviting, setIsInviting] = useState(false);
-
-  const [groupMemberIds, setGroupMemberIds] = useState(new Set<string>());
-
-  useEffect(() => {
-    if (!group?.id) return;
-
-    const fetchGroupMembers = async () => {
-        try {
-            const response = await fetch(`http://localhost:3001/api/group-memberships`);
-            if (response.ok) {
-                const allMemberships = await response.json();
-                if (Array.isArray(allMemberships)) {
-                    const currentGroupMemberIds = new Set<string>();
-                    allMemberships.forEach((m: any) => {
-                        if (m.group_id === group.id) {
-                            currentGroupMemberIds.add(m.user_id);
-                        }
-                    });
-                    setGroupMemberIds(currentGroupMemberIds);
-                }
-            } else {
-                console.error("Failed to fetch group memberships:", response.statusText);
-                setGroupMemberIds(new Set<string>()); // Clear on failure
-            }
-        } catch (error) {
-            console.error("Could not fetch group memberships.", error);
-            setGroupMemberIds(new Set<string>()); // Clear on error
-        }
-    };
-
-    fetchGroupMembers();
-  }, [group?.id]);
 
   // --- Sync State ---
   useEffect(() => {
@@ -253,6 +254,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
         setConfirmDialog(prev => ({ ...prev, isOpen: false }));
     } catch (err: any) {
         alert(`Failed to save settings: ${err.message || "Unknown error"}`);
+    }
+  };
+
+  const handleStartNewCycle = async (randomize = false) => {
+    setIsStartingNewCycle(true);
+    try {
+      const newSchedule = await db.startNewPayoutCycle(group.id, randomize);
+      setPayoutOrder(newSchedule);
+      if (onRefresh) onRefresh();
+      alert("New payout cycle started successfully");
+    } catch (error) {
+      console.error("Failed to start new cycle:", error);
+      alert("Failed to start new payout cycle. Please try again.");
+    } finally {
+      setIsStartingNewCycle(false);
     }
   };
 
@@ -540,14 +556,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
       // and anyone whose status isn't 'ACTIVE'. Also filters by search term.
       const filteredMembers = members.filter(member =>
           member.role !== UserRole.SUPERUSER &&
-          groupMemberIds.has(member.id) &&
+          memberIdSet.has(member.id) &&
           member.status === 'ACTIVE' &&
           (member.name.toLowerCase().includes(searchTerm.toLowerCase()) || member.email.toLowerCase().includes(searchTerm.toLowerCase()))
       );
 
       const pendingMembersForCurrentGroup = members.filter(member =>
           member.role !== UserRole.SUPERUSER &&
-          groupMemberIds.has(member.id) &&
+          memberIdSet.has(member.id) &&
           member.status === 'PENDING' &&
           (member.name.toLowerCase().includes(searchTerm.toLowerCase()) || member.email.toLowerCase().includes(searchTerm.toLowerCase()))
       );
@@ -800,21 +816,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   );
 
   const renderPayouts = () => {
+    // --- Payout Cycle Logic ---
+
+    // 1. Identify all active members who are part of the current payout cycle.
+    const activeMembersInCycle = members.filter(m => memberIdSet.has(m.id) && m.status === 'ACTIVE' && m.role !== UserRole.SUPERUSER);
+    const activeMemberIds = new Set(activeMembersInCycle.map(m => m.id));
+
+    // 2. Get a set of user IDs who have already been paid in this cycle from payout history.
     const paidUserIds = new Set(payoutHistory.map(t => t.userId));
-    const activeMemberIds = new Set(members.filter(m => groupMemberIds.has(m.id) && m.status === 'ACTIVE' && m.role !== UserRole.SUPERUSER).map(m => m.id));
 
-    // Filter the original payoutOrder to include only users who are still active members.
+    // 3. Create lists of members who have and have not received their payout.
+    const membersWhoHaveReceived = activeMembersInCycle.filter(m => paidUserIds.has(m.id));
+    const membersYetToReceive = activeMembersInCycle.filter(m => !paidUserIds.has(m.id));
+
+    // 4. Determine if the payout cycle is complete.
+    // This is true when there are active members and all of them have been paid.
+    const isPayoutCycleComplete = activeMemberIds.size > 0 && membersYetToReceive.length === 0;
+
+    // 5. Find the next member in the payout order who hasn't been paid.
     const validPayoutOrder = payoutOrder.filter(userId => activeMemberIds.has(userId));
-
-    const membersWhoHaveReceived = members.filter(m => paidUserIds.has(m.id) && activeMemberIds.has(m.id));
-    const membersYetToReceive = members.filter(m => activeMemberIds.has(m.id) && !paidUserIds.has(m.id));
-
-    // Find the next recipient from the valid, filtered payout order.
     const nextRecipientId = validPayoutOrder.find(userId => !paidUserIds.has(userId));
     const nextRecipient = nextRecipientId ? members.find(m => m.id === nextRecipientId) : undefined;
     
+    // 6. Find the index of the next recipient for highlighting in the UI.
     const nextUserIndex = payoutOrder.findIndex(userId => !paidUserIds.has(userId));
-    
+
     const handleManualPayout = async () => {
         if (!nextRecipient) {
             alert("No one is scheduled for the next payout.");
@@ -875,7 +901,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
             <div className="lg:col-span-2 space-y-6">
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                     <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-2">Next Payout Recipient</h3>
-                    {nextRecipient ? (
+                    {isPayoutCycleComplete ? (
+                        // This view shows when the payout cycle is complete.
+                        <div className="text-center p-8 bg-green-50 dark:bg-green-700/50 rounded-lg">
+                            <p className="font-medium text-gray-700 dark:text-gray-300">All members have been paid for this cycle!</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">You can now start a new payout cycle.</p>
+                             <button 
+                                onClick={() => handleStartNewCycle()} 
+                                disabled={isStartingNewCycle}
+                                className="mt-4 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isStartingNewCycle ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                                {isStartingNewCycle ? 'Starting...' : 'Start New Payout Cycle'}
+                            </button>
+                        </div>
+                    ) : nextRecipient ? (
+                        // This view shows the next person to be paid.
                         <div className="flex flex-col sm:flex-row items-center justify-between p-4 bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-800 rounded-lg">
                            <div className="flex items-center gap-4">
                                <img src={nextRecipient.avatar} alt={nextRecipient.name} className="w-12 h-12 rounded-full border-2 border-white"/>
@@ -894,9 +935,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                             </button>
                         </div>
                     ) : (
+                        // This view shows while data is loading or if there's no next recipient.
                         <div className="text-center p-8 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                            <p className="font-medium text-gray-700 dark:text-gray-300">All members have been paid for this cycle!</p>
-                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">The payout schedule is complete. You can start a new cycle in settings.</p>
+                            <p className="font-medium text-gray-700 dark:text-gray-300">Loading payout information...</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">If the cycle is complete, the option to start a new one will appear here.</p>
                         </div>
                     )}
                 </div>
@@ -926,7 +968,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                                         <p className="font-medium text-gray-800 dark:text-gray-200">{member.name}</p>
                                     </div>
                                     <div>
-                                        {isPaid ? <span className="px-2 py-1 text-xs font-bold text-green-800 dark:text-green-300 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center gap-1"><CheckCircle className="w-3 h-3"/> Paid</span> : isNext ? <span className="px-2 py-1 text-xs font-bold text-blue-800 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/30 rounded-full animate-pulse">Next Up</span> : <span className="text-xs text-gray-500">Queued</span>}
+                                        {isPaid ? <span className="px-2 py-1 text-xs font-bold text-green-800 dark:text-green-300 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center gap-1"><CheckCircle className="w-3 h-3"/> Paid</span> : isNext ? <span className="px-2 py-1 text-xs font-bold text-blue-800 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/30 rounded-full animate-pulse">Next Up</span> : <span className="px-2 py-1 text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded-full">Pending</span>}
                                     </div>
                                 </li>
                             );
@@ -1017,7 +1059,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
 
     const activeMembersForPayout = members.filter(member =>
         member.role !== UserRole.SUPERUSER &&
-        groupMemberIds.has(member.id) &&
+        memberIdSet.has(member.id) &&
         member.status === 'ACTIVE'
     );
     

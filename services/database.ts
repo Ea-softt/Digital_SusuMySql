@@ -522,20 +522,82 @@ class DatabaseService {
     return false;
   }
 
-  async clearAllGroups(): Promise<boolean> {
-    if (this.isServerOnline) {
-      try {
-        const groupIds = [...this.groups.map(g => g.id)];
-        for (const groupId of groupIds) {
-          await this.deleteGroup(groupId);
+    async clearAllGroups(): Promise<boolean> {
+
+      if (this.isServerOnline) {
+
+        try {
+
+          const groupIds = [...this.groups.map(g => g.id)];
+
+          for (const groupId of groupIds) {
+
+            await this.deleteGroup(groupId);
+
+          }
+
+          this.groups = [];
+
+          return true;
+
+        } catch (e) {
+
+          console.error("Clear all groups failed", e);
+
         }
-        this.groups = [];
-        return true;
-      } catch (e) {
-        console.error("Clear all groups failed", e);
+
       }
+
+      return false;
+
     }
-    return false;
-  }}
+
+  
+
+    async startNewPayoutCycle(groupId: string, randomize: boolean): Promise<string[]> {
+
+      if (this.isServerOnline) {
+
+        try {
+
+          const res = await fetch(`${API_BASE}/groups/${groupId}/new-cycle`, {
+
+            method: 'POST',
+
+            headers: { 'Content-Type': 'application/json' },
+
+            body: JSON.stringify({ randomize })
+
+          });
+
+          if (res.ok) {
+
+            const { newSchedule } = await res.json();
+
+            return newSchedule;
+
+          } else {
+
+            const errorData = await res.json();
+
+            throw new Error(errorData.error || 'Failed to start new cycle on server.');
+
+          }
+
+        } catch (e: any) {
+
+          console.error("Start new cycle service failed", e);
+
+          throw new Error(e.message || "Failed to start new cycle.");
+
+        }
+
+      }
+
+      throw new Error("Server is offline. Cannot start new cycle.");
+
+    }
+
+  }
 
 export const db = new DatabaseService();

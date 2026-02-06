@@ -543,7 +543,53 @@ app.get('/api/group-memberships', async (req, res) => {
     }
 });
 
+app.post('/api/groups/:groupId/new-cycle', async (req, res) => {
+    const { groupId } = req.params;
+    const { randomize } = req.body;
+    const connection = await pool.getConnection();
 
+    try {
+        await connection.beginTransaction();
+
+        // 1. Delete all "payout" transactions for this group
+        await connection.query('DELETE FROM transactions WHERE group_id = ? AND type = "PAYOUT"', [groupId]);
+
+        // 2. Get all active members of the group
+        const [members] = await connection.query(
+            'SELECT user_id FROM group_memberships WHERE group_id = ? AND status = "ACTIVE"',
+            [groupId]
+        );
+
+        if (members.length === 0) {
+            throw new Error("No active members found in this group to start a new cycle.");
+        }
+
+        let newSchedule = members.map(m => m.user_id);
+
+        // 3. Create a new payout_schedule (randomized if requested)
+        if (randomize) {
+            newSchedule.sort(() => Math.random() - 0.5);
+        }
+
+        // 4. Update the payout_schedule and cycle_number for the group
+        await connection.query(
+            'UPDATE savings_groups SET payout_schedule = ?, cycle_number = cycle_number + 1 WHERE id = ?',
+            [JSON.stringify(newSchedule), groupId]
+        );
+
+        await connection.commit();
+
+        // 5. Return the new payout_schedule
+        res.json({ success: true, newSchedule });
+
+    } catch (error) {
+        await connection.rollback();
+        console.error(`Failed to start new cycle for group ${groupId}:`, error);
+        res.status(500).json({ error: error.message });
+    } finally {
+        connection.release();
+    }
+});
 
 app.listen(PORT, () => {
     console.log(`🚀 Digital Susu API active on http://localhost:${PORT}`);
