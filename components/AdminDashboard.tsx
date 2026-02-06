@@ -80,6 +80,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   const [allTimePayoutHistory, setAllTimePayoutHistory] = useState<Transaction[]>([]);
   const [memberIdSet, setMemberIdSet] = useState(new Set<string>());
 
+  // --- Derived State for Payout Cycle ---
+  const activeMembersInCycle = useMemo(() => 
+      members.filter(m => memberIdSet.has(m.id) && m.status === 'ACTIVE' && m.role !== UserRole.SUPERUSER),
+      [members, memberIdSet]
+  );
+
+  const paidUserIds = useMemo(() => 
+      new Set(currentCyclePayoutHistory.map(t => t.userId)),
+      [currentCyclePayoutHistory]
+  );
+
+  const isPayoutCycleComplete = useMemo(() => 
+      activeMembersInCycle.length > 0 && activeMembersInCycle.every(m => paidUserIds.has(m.id)),
+      [activeMembersInCycle, paidUserIds]
+  );
+
   useEffect(() => {
     if (!group?.id) return;
 
@@ -598,6 +614,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                     <button 
                         onClick={() => setIsSplitPayoutModalOpen(true)}
                         disabled={group.totalPool <= 0}
+                        disabled={group.totalPool <= 0 || isPayoutCycleComplete}
                         className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <Shuffle className="w-4 h-4" /> Distribute Payout
@@ -833,27 +850,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   const renderPayouts = () => {
     // --- Payout Cycle Logic ---
 
-    // 1. Identify all active members who are part of the current payout cycle.
-    const activeMembersInCycle = members.filter(m => memberIdSet.has(m.id) && m.status === 'ACTIVE' && m.role !== UserRole.SUPERUSER);
-    const activeMemberIds = new Set(activeMembersInCycle.map(m => m.id));
-
-    // 2. Get a set of user IDs who have already been paid in this cycle from payout history.
-    const paidUserIds = new Set(currentCyclePayoutHistory.map(t => t.userId));
-
-    // 3. Create lists of members who have and have not received their payout.
+    // Use derived state from top level
     const membersWhoHaveReceived = activeMembersInCycle.filter(m => paidUserIds.has(m.id));
     const membersYetToReceive = activeMembersInCycle.filter(m => !paidUserIds.has(m.id));
 
-    // 4. Determine if the payout cycle is complete.
-    // This is true when there are active members and all of them have been paid.
-    const isPayoutCycleComplete = activeMemberIds.size > 0 && membersYetToReceive.length === 0;
-
-    // 5. Find the next member in the payout order who hasn't been paid.
-    const validPayoutOrder = payoutOrder.filter(userId => activeMemberIds.has(userId));
+    // Find the next member in the payout order who hasn't been paid.
+    const validPayoutOrder = payoutOrder.filter(userId => activeMembersInCycle.some(m => m.id === userId));
     const nextRecipientId = validPayoutOrder.find(userId => !paidUserIds.has(userId));
     const nextRecipient = nextRecipientId ? members.find(m => m.id === nextRecipientId) : undefined;
     
-    // 6. Find the index of the next recipient for highlighting in the UI.
+    // Find the index of the next recipient for highlighting in the UI.
     const nextUserIndex = payoutOrder.findIndex(userId => !paidUserIds.has(userId));
 
     const handleManualPayout = async () => {
