@@ -80,6 +80,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   const [allTimePayoutHistory, setAllTimePayoutHistory] = useState<Transaction[]>([]);
   const [memberIdSet, setMemberIdSet] = useState(new Set<string>());
 
+  // --- Transaction Filter & Sort State ---
+  const [txSortOrder, setTxSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [txDateFrom, setTxDateFrom] = useState('');
+  const [txDateTo, setTxDateTo] = useState('');
+
   // --- Derived State for Payout Cycle ---
   const activeMembersInCycle = useMemo(() => 
       members.filter(m => memberIdSet.has(m.id) && m.status === 'ACTIVE' && m.role !== UserRole.SUPERUSER),
@@ -740,9 +745,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
 
   const renderTransactions = () => {
     // Now uses dedicated state for group contributions, simplifying the filter.
-    const filteredContributionTransactions = groupContributionTransactions.filter(tx =>
-        tx.userName.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredContributionTransactions = groupContributionTransactions.filter(tx => {
+        const matchesSearch = tx.userName.toLowerCase().includes(searchTerm.toLowerCase());
+        let matchesDate = true;
+        if (txDateFrom && tx.date < txDateFrom) matchesDate = false;
+        if (txDateTo && tx.date > txDateTo) matchesDate = false;
+        return matchesSearch && matchesDate;
+    }).sort((a, b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        return txSortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+    });
 
     // Filter transactions for the current administrator, excluding contributions which are now in the main table
     const adminPersonalTransactions = transactions.filter(tx =>
@@ -756,11 +769,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
       <div className="space-y-6 animate-fade-in">
           {/* Member Contribution Transactions */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border overflow-hidden">
-              <h3 className="font-bold text-lg text-gray-900 dark:text-white px-6 py-4 border-b border-gray-100 dark:border-gray-700">Member Contribution Transactions</h3>
+              <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex flex-col md:flex-row justify-between items-center gap-4">
+                  <h3 className="font-bold text-lg text-gray-900 dark:text-white">Member Contribution Transactions</h3>
+                  <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-700 p-1 rounded-lg border border-gray-200 dark:border-gray-600">
+                          <span className="text-xs text-gray-500 dark:text-gray-400 pl-2">Date:</span>
+                          <input 
+                              type="date" 
+                              value={txDateFrom} 
+                              onChange={(e) => setTxDateFrom(e.target.value)} 
+                              className="bg-transparent border-none text-xs text-gray-900 dark:text-white focus:ring-0 p-1"
+                              placeholder="From"
+                          />
+                          <span className="text-gray-400">-</span>
+                          <input 
+                              type="date" 
+                              value={txDateTo} 
+                              onChange={(e) => setTxDateTo(e.target.value)} 
+                              className="bg-transparent border-none text-xs text-gray-900 dark:text-white focus:ring-0 p-1"
+                              placeholder="To"
+                          />
+                          {(txDateFrom || txDateTo) && (
+                              <button onClick={() => { setTxDateFrom(''); setTxDateTo(''); }} className="p-1 hover:text-red-500 text-gray-400">
+                                  <X className="w-3 h-3" />
+                              </button>
+                          )}
+                      </div>
+                  </div>
+              </div>
               <table className="w-full text-left text-sm">
                   <thead className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
                       <tr>
-                          <th className="px-6 py-4">Date</th>
+                          <th className="px-6 py-4 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors group" onClick={() => setTxSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}>
+                              <div className="flex items-center gap-1">
+                                  Date
+                                  {txSortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-primary-600" /> : <ArrowDown className="w-3 h-3 text-primary-600" />}
+                              </div>
+                          </th>
                           <th className="px-6 py-4">Member Name</th>
                           <th className="px-6 py-4">Amount</th>
                           <th className="px-6 py-4">Status</th>
