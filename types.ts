@@ -88,7 +88,7 @@ export interface Group {
   name: string;
   contributionAmount: number; // How much everyone pays per cycle
   currency: string; // e.g., 'GHS', 'USD'
-  frequency: 'Weekly' | 'Monthly' | 'Bi-Weekly';
+  frequency: 'Weekly' | 'Monthly' | 'Bi-Weekly' | 'Yearly' | 'Daily';
   nextPayoutDate: string;
   cycleNumber: number; // Which rotation are they on?
   totalPool: number; // Current money in the pot

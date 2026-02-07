@@ -86,6 +86,9 @@ async function initializeDatabase() {
         await connection.query(`ALTER TABLE users MODIFY COLUMN kyc_document_image LONGTEXT`);
         await connection.query(`ALTER TABLE savings_groups MODIFY COLUMN icon LONGTEXT`);
 
+        // Update frequency enum to include new options (Yearly, Daily)
+        await connection.query(`ALTER TABLE savings_groups MODIFY COLUMN frequency ENUM('Weekly', 'Monthly', 'Bi-Weekly', 'Yearly', 'Daily') DEFAULT 'Monthly'`);
+
         await connection.query(`
             CREATE TABLE IF NOT EXISTS group_memberships (
                 user_id VARCHAR(50),

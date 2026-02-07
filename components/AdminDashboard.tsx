@@ -841,6 +841,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
               <form onSubmit={(e) => { e.preventDefault(); setConfirmDialog({ isOpen: true, title: 'Save Settings', message: 'Update group details in MySQL?', type: 'warning', onConfirm: handleUpdateGroup }); }} className="space-y-6">
                   <div><label className="block text-sm font-medium mb-2">Group Name</label><input type="text" value={group.name} onChange={(e) => setGroup({...group, name: e.target.value})} className="w-full p-3 border rounded-lg bg-gray-50 dark:bg-gray-700" /></div>
                   <div className="grid grid-cols-2 gap-6"><div><label className="block text-sm font-medium mb-2">Contribution Amount</label><input type="number" value={group.contributionAmount} onChange={(e) => setGroup({...group, contributionAmount: Number(e.target.value)})} className="w-full p-3 border rounded-lg bg-gray-50 dark:bg-gray-700" /></div><div><label className="block text-sm font-medium mb-2">Currency</label><select value={group.currency} onChange={(e) => setGroup({...group, currency: e.target.value})} className="w-full p-3 border rounded-lg bg-gray-50 dark:bg-gray-700"><option value="GHS">GHS</option><option value="USD">USD</option></select></div></div>
+                  
+                  {/* Frequency Setting */}
+                  <div>
+                      <label className="block text-sm font-medium mb-2">Frequency</label>
+                      <select value={group.frequency} onChange={(e) => setGroup({...group, frequency: e.target.value as any})} className="w-full p-3 border rounded-lg bg-gray-50 dark:bg-gray-700">
+                          <option value="Daily">Daily</option>
+                          <option value="Weekly">Weekly</option>
+                          <option value="Bi-Weekly">Bi-Weekly</option>
+                          <option value="Monthly">Monthly</option>
+                          <option value="Yearly">Yearly</option>
+                      </select>
+                  </div>
+
                   <div><button type="submit" className="px-6 py-3 bg-primary-600 text-white rounded-lg font-bold shadow-md"><Save className="w-4 h-4 mr-2 inline" /> Save Changes</button></div>
               </form>
           </div>
