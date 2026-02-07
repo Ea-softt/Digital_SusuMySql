@@ -554,9 +554,14 @@ app.post('/api/groups/:groupId/new-cycle', async (req, res) => {
         // 1. Delete all "payout" transactions for this group
         await connection.query('DELETE FROM transactions WHERE group_id = ? AND type = "PAYOUT"', [groupId]);
 
-        // 2. Get all active members of the group
+        // 2. Get all active members of the group (excluding SUPERUSER)
         const [members] = await connection.query(
-            'SELECT user_id FROM group_memberships WHERE group_id = ? AND status = "ACTIVE"',
+            `SELECT gm.user_id 
+             FROM group_memberships gm
+             JOIN users u ON gm.user_id = u.id
+             WHERE gm.group_id = ? 
+             AND gm.status = 'ACTIVE'
+             AND u.role != 'SUPERUSER'`,
             [groupId]
         );
 

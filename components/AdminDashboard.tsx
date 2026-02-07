@@ -860,7 +860,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
     const nextRecipient = nextRecipientId ? members.find(m => m.id === nextRecipientId) : undefined;
     
     // Find the index of the next recipient for highlighting in the UI.
-    const nextUserIndex = payoutOrder.findIndex(userId => !paidUserIds.has(userId));
+    const nextUserIndex = validPayoutOrder.findIndex(userId => !paidUserIds.has(userId));
 
     const handleManualPayout = async () => {
         if (!nextRecipient) {
@@ -974,7 +974,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                     </div>
                     
                     <ul className="space-y-3">
-                        {payoutOrder.map((userId, index) => {
+                        {validPayoutOrder.map((userId, index) => {
                             const member = members.find(m => m.id === userId);
                             if (!member) return null;
 
