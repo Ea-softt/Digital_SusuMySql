@@ -502,8 +502,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   // --- RENDERERS ---
 
   const renderOverview = () => {
-    const completedCount = activeMembers.length - pendingTransactions.length;
-    const pieData = [{ name: 'Paid', value: completedCount }, { name: 'Pending', value: pendingTransactions.length }];
+    // --- Time-Based Cycle Progress ---
+    const now = new Date().getTime();
+    const start = group.cycleStartDate ? new Date(group.cycleStartDate).getTime() : now;
+    const end = group.cycleEndDate ? new Date(group.cycleEndDate).getTime() : now + 1000 * 60 * 60 * 24 * 30; // Default 30 days if null
+    const totalDuration = end - start;
+    const elapsed = now - start;
+    // Calculate percentage, clamped between 0 and 100
+    const timeProgress = totalDuration > 0 ? Math.min(Math.max((elapsed / totalDuration) * 100, 0), 100) : 0;
+    const daysRemaining = Math.ceil((end - now) / (1000 * 60 * 60 * 24));
+
+    // --- Payment Progress (Reset on new cycle) ---
+    // Filter transactions to only include those in the current cycle (after start date)
+    const currentCycleContributions = groupContributionTransactions.filter(t => 
+        new Date(t.date).getTime() >= start && t.status === 'COMPLETED'
+    );
+    
+    // Count unique members who have contributed in this cycle
+    const paidMemberIds = new Set(currentCycleContributions.map(t => t.userId));
+    const paidCount = paidMemberIds.size;
+    const pendingCount = Math.max(0, activeMembers.length - paidCount);
+
+    const pieData = [{ name: 'Paid', value: paidCount }, { name: 'Pending', value: pendingCount }];
     const COLORS = ['#10b981', '#f59e0b'];
     return (
       <div className="space-y-6 animate-fade-in">
@@ -516,53 +536,53 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-bold text-gray-800 dark:text-white">Active Cycle Progress</h3>
+              <h3 className="text-lg font-bold text-gray-800 dark:text-white">Active Cycle Progress ({group.frequency})</h3>
               <div className="text-right">
-                <p className="text-sm text-gray-500 dark:text-gray-400">Collection Target</p>
-                <p className="text-lg font-bold text-gray-900 dark:text-white">{moneyFormatter(cycleTarget, group.currency)}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Time Remaining</p>
+                <p className="text-lg font-bold text-gray-900 dark:text-white">{daysRemaining} Days</p>
               </div>
             </div>
             <div className="space-y-4">
               <div className="flex items-end gap-4">
                 <div className="flex-1">
-                  <div className="text-sm text-gray-600 dark:text-gray-300 mb-2">Collected vs Target</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-300 mb-2">Elapsed Time vs Duration</div>
                   <ResponsiveContainer width="100%" height={200}>
                     <AreaChart data={[
-                      { name: 'Progress', collected: group.totalPool, target: cycleTarget }
+                      { name: 'Time', elapsed: timeProgress, total: 100 }
                     ]}>
                       <defs>
-                        <linearGradient id="colorCollected" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0.1}/>
+                        <linearGradient id="colorTime" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1}/>
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                       <XAxis dataKey="name" stroke="#9ca3af" />
-                      <YAxis stroke="#9ca3af" />
+                      <YAxis stroke="#9ca3af" unit="%" />
                       <RechartsTooltip contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#fff' }} />
-                      <Area type="monotone" dataKey="collected" stroke="#10b981" fillOpacity={1} fill="url(#colorCollected)" name="Collected" />
+                      <Area type="monotone" dataKey="elapsed" stroke="#3b82f6" fillOpacity={1} fill="url(#colorTime)" name="Elapsed %" />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-                  <p className="text-xs text-green-600 dark:text-green-400 font-medium">COLLECTED</p>
-                  <p className="text-xl font-bold text-green-700 dark:text-green-300">{moneyFormatter(group.totalPool, group.currency)}</p>
+                  <p className="text-xs text-green-600 dark:text-green-400 font-medium">START DATE</p>
+                  <p className="text-sm font-bold text-green-700 dark:text-green-300">{new Date(start).toLocaleDateString()}</p>
                 </div>
                 <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                  <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">REMAINING</p>
-                  <p className="text-xl font-bold text-blue-700 dark:text-blue-300">{moneyFormatter(Math.max(0, cycleTarget - group.totalPool), group.currency)}</p>
+                  <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">END DATE</p>
+                  <p className="text-sm font-bold text-blue-700 dark:text-blue-300">{new Date(end).toLocaleDateString()}</p>
                 </div>
                 <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
-                  <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">COMPLETION</p>
-                  <p className="text-xl font-bold text-purple-700 dark:text-purple-300">{Math.round(collectionProgress)}%</p>
+                  <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">ELAPSED</p>
+                  <p className="text-xl font-bold text-purple-700 dark:text-purple-300">{Math.round(timeProgress)}%</p>
                 </div>
               </div>
             </div>
           </div>
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col">
-            <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6">Payment Progress</h3>
+            <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6">Payment Progress (Current Cycle)</h3>
             <div className="flex-1 min-h-[200px] relative">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -575,7 +595,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
               </ResponsiveContainer>
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="text-center">
-                  <p className="text-3xl font-bold text-gray-900 dark:text-white">{Math.round((completedCount / (activeMembers.length || 1)) * 100)}%</p>
+                  <p className="text-3xl font-bold text-gray-900 dark:text-white">{Math.round((paidCount / (activeMembers.length || 1)) * 100)}%</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">PAID</p>
                 </div>
               </div>

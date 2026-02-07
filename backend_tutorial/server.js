@@ -89,6 +89,12 @@ async function initializeDatabase() {
         // Update frequency enum to include new options (Yearly, Daily)
         await connection.query(`ALTER TABLE savings_groups MODIFY COLUMN frequency ENUM('Weekly', 'Monthly', 'Bi-Weekly', 'Yearly', 'Daily') DEFAULT 'Monthly'`);
 
+        // Add cycle start and end dates for progress tracking
+        const [cycleCols] = await connection.query(`SHOW COLUMNS FROM savings_groups LIKE 'cycle_start_date'`);
+        if (cycleCols.length === 0) {
+            await connection.query(`ALTER TABLE savings_groups ADD COLUMN cycle_start_date DATETIME, ADD COLUMN cycle_end_date DATETIME`);
+        }
+
         await connection.query(`
             CREATE TABLE IF NOT EXISTS group_memberships (
                 user_id VARCHAR(50),
@@ -572,17 +578,35 @@ app.post('/api/groups/:groupId/new-cycle', async (req, res) => {
             throw new Error("No active members found in this group to start a new cycle.");
         }
 
+        // 3. Calculate Cycle Dates based on Frequency
+        const [groupInfo] = await connection.query('SELECT frequency FROM savings_groups WHERE id = ?', [groupId]);
+        const frequency = groupInfo[0]?.frequency || 'Monthly';
+        
+        const startDate = new Date();
+        const endDate = new Date(startDate);
+        
+        switch (frequency) {
+            case 'Daily': endDate.setDate(startDate.getDate() + 1); break;
+            case 'Weekly': endDate.setDate(startDate.getDate() + 7); break;
+            case 'Bi-Weekly': endDate.setDate(startDate.getDate() + 14); break;
+            case 'Yearly': endDate.setFullYear(startDate.getFullYear() + 1); break;
+            case 'Monthly': 
+            default:
+                endDate.setMonth(startDate.getMonth() + 1);
+                break;
+        }
+
         let newSchedule = members.map(m => m.user_id);
 
-        // 3. Create a new payout_schedule (randomized if requested)
+        // 4. Create a new payout_schedule (randomized if requested)
         if (randomize) {
             newSchedule.sort(() => Math.random() - 0.5);
         }
 
-        // 4. Update the payout_schedule and cycle_number for the group
+        // 5. Update the payout_schedule, cycle_number, and dates for the group
         await connection.query(
-            'UPDATE savings_groups SET payout_schedule = ?, cycle_number = cycle_number + 1 WHERE id = ?',
-            [JSON.stringify(newSchedule), groupId]
+            'UPDATE savings_groups SET payout_schedule = ?, cycle_number = cycle_number + 1, cycle_start_date = ?, cycle_end_date = ? WHERE id = ?',
+            [JSON.stringify(newSchedule), startDate, endDate, groupId]
         );
 
         await connection.commit();

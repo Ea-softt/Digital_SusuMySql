@@ -99,6 +99,8 @@ export interface Group {
   welcomeMessage?: string;
   icon?: string;
   status: 'ACTIVE' | 'PENDING_VERIFICATION' | 'REJECTED';
+  cycleStartDate?: string;
+  cycleEndDate?: string;
 }
 
 // Any money movement is a Transaction
