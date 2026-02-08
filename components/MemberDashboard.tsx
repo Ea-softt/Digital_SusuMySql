@@ -1,9 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
-import { Group, Transaction, User } from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Group, Transaction, User, UserRole } from '../types';
 import { StatsCard } from './StatsCard';
 import { Wallet, Calendar, PiggyBank, History, Search, ArrowRight, CheckCircle, Clock, ShieldAlert, UserCheck, LayoutDashboard, Users, DollarSign, Smartphone, Loader2, Lock, Copy, AlertTriangle, X, Shield } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, AreaChart, Area, CartesianGrid } from 'recharts';
 import { db } from '../services/database';
 import { moneyFormatter } from '../utils/formatters';
 import { processGhanaMobileMoneyPayment, validateMobileMoneyTransaction, normalizePhoneNumber } from '../services/ghanaMoneyService';
@@ -38,6 +38,17 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawPassword, setWithdrawPassword] = useState('');
   const [isProcessingWithdraw, setIsProcessingWithdraw] = useState(false);
+
+  // Filter out superusers from the members list used in this dashboard.
+  // This enforces the exclusion at the data level for this view.
+  const visibleMembers = useMemo(() => {
+    return members.filter(m => m.role !== UserRole.SUPERUSER);
+  }, [members]);
+
+  // Filter the payout schedule to only include visible members
+  const visibleSchedule = useMemo(() => {
+    return group.payoutSchedule.filter(id => visibleMembers.some(m => m.id === id));
+  }, [group.payoutSchedule, visibleMembers]);
 
   // Derived Data
   const userTransactions = transactions.filter(t => t.userId === userId).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -367,15 +378,39 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
   }
 
   const renderOverview = () => {
-    const chartData = [
-        { name: 'Jan', amount: 500 },
-        { name: 'Feb', amount: 500 },
-        { name: 'Mar', amount: 500 },
-        { name: 'Apr', amount: 500 },
-        { name: 'May', amount: 500 },
-        { name: 'Jun', amount: 0 }, 
-      ];
+    const hasActiveCycle = group.cycleStartDate && group.cycleEndDate;
+    const now = new Date();
     
+    let cycleProgress = 0;
+    let daysRemaining = 0;
+    let isPaid = false;
+    let amountPaid = 0;
+    let startDate: Date | null = null;
+    let endDate: Date | null = null;
+
+    if (hasActiveCycle) {
+        startDate = new Date(group.cycleStartDate!);
+        endDate = new Date(group.cycleEndDate!);
+        
+        const totalDuration = endDate.getTime() - startDate.getTime();
+        const elapsed = now.getTime() - startDate.getTime();
+        
+        // Clamp progress between 0 and 100
+        cycleProgress = Math.min(Math.max((elapsed / totalDuration) * 100, 0), 100);
+        daysRemaining = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+        // Check contribution for THIS cycle
+        const cycleContributions = userTransactions.filter(t => 
+            t.type === 'CONTRIBUTION' && 
+            t.status === 'COMPLETED' &&
+            new Date(t.date).getTime() >= startDate!.getTime() &&
+            new Date(t.date).getTime() <= endDate!.getTime()
+        );
+        
+        amountPaid = cycleContributions.reduce((sum, t) => sum + t.amount, 0);
+        isPaid = amountPaid >= group.contributionAmount;
+    }
+
     return (
       <div className="space-y-6 animate-fade-in">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -387,8 +422,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
             />
             <StatsCard
             title="Next Payout Date"
-            value={group.nextPayoutDate}
-            trend="In 14 days"
+            value={hasActiveCycle && endDate ? endDate.toLocaleDateString() : 'TBD'}
+            trend={hasActiveCycle ? `${daysRemaining} days left` : 'No active cycle'}
             trendUp={true}
             icon={Calendar}
             color="bg-blue-600"
@@ -412,43 +447,82 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
             <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-bold text-gray-800 dark:text-white">Contribution Overview</h3>
+                <h3 className="text-lg font-bold text-gray-800 dark:text-white">Active Cycle Overview</h3>
+                {hasActiveCycle && (
+                    <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-bold rounded-full">
+                        Cycle #{group.cycleNumber}
+                    </span>
+                )}
             </div>
-            <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData}>
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} stroke="#9ca3af" />
-                    <YAxis hide />
-                    <Tooltip 
-                        cursor={{fill: 'transparent'}}
-                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', backgroundColor: '#1f2937', color: '#fff' }}
-                    />
-                    <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
-                        {chartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={index === 5 ? '#e5e7eb' : '#10b981'} />
-                        ))}
-                    </Bar>
-                    </BarChart>
-                </ResponsiveContainer>
-            </div>
+            
+            {hasActiveCycle ? (
+                <div className="space-y-6">
+                    <div>
+                        <div className="flex justify-between text-sm mb-2">
+                            <span className="text-gray-500 dark:text-gray-400">Cycle Progress</span>
+                            <span className="font-bold text-gray-900 dark:text-white">{Math.round(cycleProgress)}%</span>
+                        </div>
+                        <div className="h-32 w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={[{ name: 'Progress', value: cycleProgress }]}>
+                                    <defs>
+                                        <linearGradient id="colorProgress" x1="0" y1="0" x2="1" y2="0">
+                                            <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.8}/>
+                                            <stop offset={`${cycleProgress}%`} stopColor="#3b82f6" stopOpacity={0.8}/>
+                                            <stop offset={`${cycleProgress}%`} stopColor="#e5e7eb" stopOpacity={0.2}/>
+                                            <stop offset="100%" stopColor="#e5e7eb" stopOpacity={0.2}/>
+                                        </linearGradient>
+                                    </defs>
+                                    <Tooltip cursor={false} content={() => null} />
+                                    <Area type="monotone" dataKey="value" stroke="none" fill="url(#colorProgress)" fillOpacity={1} />
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#374151" opacity={0.1} />
+                                    <XAxis hide />
+                                    <YAxis hide domain={[0, 100]} />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-2">
+                            <span>Started: {startDate?.toLocaleDateString()}</span>
+                            <span>Ends: {endDate?.toLocaleDateString()}</span>
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <div className="flex flex-col items-center justify-center h-48 text-center">
+                    <Calendar className="w-12 h-12 text-gray-300 dark:text-gray-600 mb-3" />
+                    <p className="text-gray-500 dark:text-gray-400 font-medium">No active contribution cycle.</p>
+                    <p className="text-sm text-gray-400 dark:text-gray-500">Waiting for admin to start the next cycle.</p>
+                </div>
+            )}
             </div>
 
             <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col justify-center items-center text-center">
                 <div className="w-16 h-16 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center mb-4">
-                    <Wallet className="w-8 h-8 text-primary-600 dark:text-primary-400" />
+                    {isPaid ? <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" /> : <Wallet className="w-8 h-8 text-primary-600 dark:text-primary-400" />}
                 </div>
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Next Contribution</h3>
-                <p className="text-gray-500 dark:text-gray-400 mb-6">Your next payment of <span className="font-bold text-gray-900 dark:text-white">{group.currency} {group.contributionAmount}</span> is due soon.</p>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{isPaid ? 'Contribution Complete' : 'Next Contribution'}</h3>
+                <p className="text-gray-500 dark:text-gray-400 mb-6">
+                    {isPaid 
+                        ? `You have successfully paid ${group.currency} ${amountPaid} for this cycle.` 
+                        : `Your payment of ${group.currency} ${group.contributionAmount} is due soon.`
+                    }
+                </p>
                 <button 
                     onClick={handlePayContribution}
-                    disabled={isContributing}
-                    className="w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-3 px-6 rounded-lg transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5 flex items-center justify-center gap-2"
+                    disabled={isContributing || isPaid || !hasActiveCycle}
+                    className={`w-full font-bold py-3 px-6 rounded-lg transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5 flex items-center justify-center gap-2 ${
+                        isPaid 
+                        ? 'bg-green-600 hover:bg-green-700 text-white cursor-default' 
+                        : 'bg-primary-600 hover:bg-primary-700 text-white'
+                    } disabled:opacity-70 disabled:cursor-not-allowed`}
                 >
-                    {isContributing ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Pay Now'}
+                    {isContributing ? <Loader2 className="w-5 h-5 animate-spin" /> : isPaid ? 'Paid' : 'Pay Now'}
                 </button>
-                <p className="text-xs text-gray-400 mt-4 flex items-center gap-1">
-                    <CheckCircle className="w-3 h-3" /> Secure Transaction
-                </p>
+                {!isPaid && hasActiveCycle && (
+                    <p className="text-xs text-gray-400 mt-4 flex items-center gap-1">
+                        <Clock className="w-3 h-3" /> {daysRemaining > 0 ? `${daysRemaining} days remaining` : 'Cycle Ended'}
+                    </p>
+                )}
             </div>
         </div>
       </div>
@@ -486,7 +560,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                           </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                          {members.map(member => (
+                          {visibleMembers.map(member => (
                               <tr key={member.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                                   <td className="px-6 py-4">
                                       <div className="flex items-center gap-3">
@@ -708,8 +782,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
               <p className="text-gray-500 dark:text-gray-400 text-sm">See when you and other members will receive the pot.</p>
           </div>
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-                {group.payoutSchedule.map((memberId, index) => {
-                    const member = members.find(m => m.id === memberId);
+                {visibleSchedule.map((memberId, index) => {
+                    const member = visibleMembers.find(m => m.id === memberId);
                     if (!member) return null;
                     const payoutDate = new Date();
                     payoutDate.setMonth(payoutDate.getMonth() + index);
