@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Group, Transaction, User, UserRole } from '../types';
 import { StatsCard } from './StatsCard';
 import { Wallet, Calendar, PiggyBank, History, Search, ArrowRight, CheckCircle, Clock, ShieldAlert, UserCheck, LayoutDashboard, Users, DollarSign, Smartphone, Loader2, Lock, Copy, AlertTriangle, X, Shield } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, AreaChart, Area, CartesianGrid } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, AreaChart, Area, CartesianGrid, PieChart, Pie, Legend } from 'recharts';
 import { db } from '../services/database';
 import { moneyFormatter } from '../utils/formatters';
 import { processGhanaMobileMoneyPayment, validateMobileMoneyTransaction, normalizePhoneNumber } from '../services/ghanaMoneyService';
@@ -38,6 +38,14 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawPassword, setWithdrawPassword] = useState('');
   const [isProcessingWithdraw, setIsProcessingWithdraw] = useState(false);
+
+  const [groupContributions, setGroupContributions] = useState<Transaction[]>([]);
+
+  useEffect(() => {
+    if (group.id) {
+        db.getGroupContributionTransactions(group.id).then(setGroupContributions);
+    }
+  }, [group.id, onRefresh]);
 
   // Filter out superusers from the members list used in this dashboard.
   // This enforces the exclusion at the data level for this view.
@@ -387,6 +395,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
     let amountPaid = 0;
     let startDate: Date | null = null;
     let endDate: Date | null = null;
+    const COLORS = ['#10b981', '#f59e0b'];
 
     if (hasActiveCycle) {
         startDate = new Date(group.cycleStartDate!);
@@ -410,6 +419,16 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
         amountPaid = cycleContributions.reduce((sum, t) => sum + t.amount, 0);
         isPaid = amountPaid >= group.contributionAmount;
     }
+
+    // Calculate Payment Progress for the Group
+    const cycleStartTime = startDate ? startDate.getTime() : new Date().getTime();
+    const currentCycleContribs = groupContributions.filter(t => 
+        new Date(t.date).getTime() >= cycleStartTime && t.status === 'COMPLETED'
+    );
+    const paidMemberIds = new Set(currentCycleContribs.map(t => t.userId));
+    const paidCount = paidMemberIds.size;
+    const pendingCount = Math.max(0, visibleMembers.length - paidCount);
+    const pieData = [{ name: 'Paid', value: paidCount }, { name: 'Pending', value: pendingCount }];
 
     return (
       <div className="space-y-6 animate-fade-in">
@@ -496,33 +515,25 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
             )}
             </div>
 
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col justify-center items-center text-center">
-                <div className="w-16 h-16 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center mb-4">
-                    {isPaid ? <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" /> : <Wallet className="w-8 h-8 text-primary-600 dark:text-primary-400" />}
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col">
+                <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6">Payment Progress (Current Cycle)</h3>
+                <div className="flex-1 min-h-[200px] relative">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                            <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} fill="#8884d8" paddingAngle={5} dataKey="value" stroke="none">
+                                {pieData.map((entry, index) => ( <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} /> ))}
+                            </Pie>
+                            <Tooltip contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#fff' }} />
+                            <Legend verticalAlign="bottom" height={36} />
+                        </PieChart>
+                    </ResponsiveContainer>
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="text-center">
+                            <p className="text-3xl font-bold text-gray-900 dark:text-white">{Math.round((paidCount / (visibleMembers.length || 1)) * 100)}%</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">PAID</p>
+                        </div>
+                    </div>
                 </div>
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{isPaid ? 'Contribution Complete' : 'Next Contribution'}</h3>
-                <p className="text-gray-500 dark:text-gray-400 mb-6">
-                    {isPaid 
-                        ? `You have successfully paid ${group.currency} ${amountPaid} for this cycle.` 
-                        : `Your payment of ${group.currency} ${group.contributionAmount} is due soon.`
-                    }
-                </p>
-                <button 
-                    onClick={handlePayContribution}
-                    disabled={isContributing || isPaid || !hasActiveCycle}
-                    className={`w-full font-bold py-3 px-6 rounded-lg transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5 flex items-center justify-center gap-2 ${
-                        isPaid 
-                        ? 'bg-green-600 hover:bg-green-700 text-white cursor-default' 
-                        : 'bg-primary-600 hover:bg-primary-700 text-white'
-                    } disabled:opacity-70 disabled:cursor-not-allowed`}
-                >
-                    {isContributing ? <Loader2 className="w-5 h-5 animate-spin" /> : isPaid ? 'Paid' : 'Pay Now'}
-                </button>
-                {!isPaid && hasActiveCycle && (
-                    <p className="text-xs text-gray-400 mt-4 flex items-center gap-1">
-                        <Clock className="w-3 h-3" /> {daysRemaining > 0 ? `${daysRemaining} days remaining` : 'Cycle Ended'}
-                    </p>
-                )}
             </div>
         </div>
       </div>
