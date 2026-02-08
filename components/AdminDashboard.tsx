@@ -67,6 +67,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   const [momoDetails, setMomoDetails] = useState({ provider: 'MTN', number: currentUser.phoneNumber || '', amount: '' });
   const [isProcessingWallet, setIsProcessingWallet] = useState(false);
   
+  // Withdrawal State
+  const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
+  const [withdrawRequestAmount, setWithdrawRequestAmount] = useState('');
+  const [isRequestingWithdrawal, setIsRequestingWithdrawal] = useState(false);
+
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawPassword, setWithdrawPassword] = useState('');
 
@@ -389,6 +394,62 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
       }
   };
 
+  // --- SECURE WITHDRAWAL LOGIC ---
+  // Backend Requirement: 
+  // 1. Validate wallet balance on server.
+  // 2. Use registered phone number from DB (never trust client input for destination).
+  // 3. Create transaction with status 'PENDING'.
+  // 4. Notify Superuser for approval.
+  const handleRequestWithdrawal = async () => {
+      if (!withdrawRequestAmount) {
+          alert('Please enter an amount.');
+          return;
+      }
+      
+      const amount = Number(withdrawRequestAmount);
+      if (isNaN(amount) || amount <= 0) {
+          alert('Please enter a valid amount greater than zero.');
+          return;
+      }
+
+      if (amount > walletBalance) {
+          alert(`Insufficient wallet balance. Available: ${moneyFormatter(walletBalance, group.currency)}`);
+          return;
+      }
+
+      // Security: Ensure phone number is present and valid from profile (not user input)
+      if (!currentUser.phoneNumber) {
+          alert('No registered phone number found. Please update your profile settings first.');
+          return;
+      }
+
+      setIsRequestingWithdrawal(true);
+      try {
+          // Security: Create transaction with PENDING status.
+          // Backend/Superuser must approve this before actual money movement.
+          const newTx: Transaction = {
+              id: `tx-w-req-${Date.now()}`,
+              userId: currentUser.id,
+              userName: currentUser.name,
+              type: 'WITHDRAWAL',
+              amount: amount,
+              date: new Date().toISOString().split('T')[0],
+              status: 'PENDING' // Enforce approval workflow
+          };
+
+          await db.addTransaction(newTx);
+          
+          if (onRefresh) onRefresh();
+          setWithdrawModalOpen(false);
+          setWithdrawRequestAmount('');
+          alert("Withdrawal request submitted successfully. Waiting for Superuser approval.");
+      } catch (err) {
+          alert("Failed to submit withdrawal request.");
+      } finally {
+          setIsRequestingWithdrawal(false);
+      }
+  };
+
   const handleAdminContribution = async () => {
       if (walletBalance < group.contributionAmount) {
           alert(`Insufficient wallet balance. Please load funds first.`);
@@ -671,6 +732,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                 <p className="text-sm text-gray-500 dark:text-gray-400">Your personal funds to manage group payments.</p>
                 <div className="mt-4 flex flex-col sm:flex-row gap-3">
                      <button onClick={() => setWalletModalOpen(true)} className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg font-bold flex items-center justify-center gap-2"><Smartphone className="w-4 h-4" /> Load Wallet</button>
+                     <button onClick={() => setWithdrawModalOpen(true)} className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg font-bold flex items-center justify-center gap-2"><ArrowUpRight className="w-4 h-4" /> Withdraw</button>
                      <button onClick={handleAdminContribution} className="flex-1 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-bold flex items-center justify-center gap-2"><DollarSign className="w-4 h-4" /> Pay My Share</button>
                 </div>
             </div>
@@ -1541,6 +1603,85 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                                     <>
                                         <Smartphone className="w-4 h-4" />
                                         Load Wallet
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {withdrawModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 border border-gray-100 dark:border-gray-700">
+                    <div className="flex items-center justify-between mb-6">
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">Request Withdrawal</h3>
+                        <button onClick={() => setWithdrawModalOpen(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+                    </div>
+
+                    <div className="space-y-4">
+                        {/* Read-only Phone Number - Security Requirement */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Registered MoMo Number</label>
+                            <div className="relative">
+                                <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                <input 
+                                    type="text" 
+                                    value={currentUser.phoneNumber || 'No number set'} 
+                                    disabled 
+                                    readOnly 
+                                    className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 font-mono cursor-not-allowed"
+                                />
+                                <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            </div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                Withdrawals are restricted to your registered profile number for security.
+                            </p>
+                        </div>
+
+                        {/* Amount Input */}
+                        <div>
+                            <div className="flex items-center justify-between">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Amount ({group.currency})</label>
+                                <span className="text-xs text-gray-500">Max: {moneyFormatter(walletBalance, group.currency)}</span>
+                            </div>
+                            <div className="relative">
+                                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                <input
+                                    type="number"
+                                    placeholder="0.00"
+                                    value={withdrawRequestAmount}
+                                    onChange={(e) => setWithdrawRequestAmount(e.target.value)}
+                                    min="1"
+                                    max={walletBalance}
+                                    className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-3 pt-2">
+                            <button
+                                onClick={() => setWithdrawModalOpen(false)}
+                                className="flex-1 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-bold transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleRequestWithdrawal}
+                                disabled={isRequestingWithdrawal || !withdrawRequestAmount || Number(withdrawRequestAmount) > walletBalance}
+                                className="flex-1 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg font-bold transition-colors flex items-center justify-center gap-2"
+                            >
+                                {isRequestingWithdrawal ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Processing...
+                                    </>
+                                ) : (
+                                    <>
+                                        <ArrowUpRight className="w-4 h-4" />
+                                        Request
                                     </>
                                 )}
                             </button>
