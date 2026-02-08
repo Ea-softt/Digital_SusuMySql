@@ -169,7 +169,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transact
                   {/* Date Column */}
                   <td className="px-6 py-4 text-gray-500 dark:text-gray-400 flex items-center gap-2">
                     <Calendar className="w-3.5 h-3.5" />
-                    {tx.date}
+                    {new Date(tx.date).toLocaleDateString()}
                   </td>
                   
                   {/* Amount Column */}

@@ -83,7 +83,9 @@ class DatabaseService {
       icon: this.isValidImage(g.icon) ? g.icon : '', 
       payoutSchedule: schedule, 
       reminderDaysBefore: 3,
-      status: g.status || 'ACTIVE'
+      status: g.status || 'ACTIVE',
+      cycleStartDate: g.cycle_start_date ? new Date(g.cycle_start_date).toISOString() : undefined,
+      cycleEndDate: g.cycle_end_date ? new Date(g.cycle_end_date).toISOString() : undefined
     };
   }
 
@@ -95,7 +97,7 @@ class DatabaseService {
       userName: t.userName || 'System', 
       type: t.type || 'CONTRIBUTION',
       amount: Number(t.amount || 0),
-      date: t.date ? new Date(t.date).toISOString().split('T')[0] : '',
+      date: t.date ? new Date(t.date).toISOString() : '',
       status: t.status || 'PENDING'
     };
   }
@@ -401,7 +403,6 @@ class DatabaseService {
   }
   
   async getGroupPayoutTransactions(groupId: string): Promise<Transaction[]> {
-    if (!this.isServerOnline) return [];
     try {
       // NOTE: This assumes a new backend endpoint exists to fetch all payout transactions for a group.
       const res = await fetch(`${API_BASE}/groups/${groupId}/transactions/payouts`, {
@@ -554,7 +555,7 @@ class DatabaseService {
 
   
 
-    async startNewPayoutCycle(groupId: string, randomize: boolean): Promise<string[]> {
+    async startNewPayoutCycle(groupId: string, randomize: boolean): Promise<{ newSchedule: string[], cycleStartDate: string, cycleEndDate: string }> {
 
       if (this.isServerOnline) {
 
@@ -572,9 +573,12 @@ class DatabaseService {
 
           if (res.ok) {
 
-            const { newSchedule } = await res.json();
-
-            return newSchedule;
+            const data = await res.json();
+            return {
+                newSchedule: data.newSchedule,
+                cycleStartDate: data.cycleStartDate,
+                cycleEndDate: data.cycleEndDate
+            };
 
           } else {
 

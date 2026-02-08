@@ -135,30 +135,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
     const fetchPayoutHistory = async () => {
       if (group?.id) {
         try {
-          const currentPayouts = await db.getGroupPayoutTransactions(group.id);
-          setCurrentCyclePayoutHistory(currentPayouts);
+          // Fetch ALL historical payouts (Backend no longer deletes them)
+          const allPayouts = await db.getGroupPayoutTransactions(group.id);
+          
+          // 1. Payout History Tab: Always show everything
+          setAllTimePayoutHistory(allPayouts);
 
-          // Merge current payouts into all-time history without duplicates.
-          setAllTimePayoutHistory(prevHistory => {
-            const newHistory = [...prevHistory];
-            const existingIds = new Set(newHistory.map(t => t.id));
-            for (const p of currentPayouts) {
-              if (!existingIds.has(p.id)) {
-                newHistory.push(p);
-              }
-            }
-            // Sort by date to keep it consistent
-            return newHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-          });
+          // 2. Active Cycle Logic: Filter for payouts in the current cycle only
+          if (group.cycleStartDate) {
+            const cycleStart = new Date(group.cycleStartDate);
+
+            const currentPayouts = allPayouts.filter(t => {
+              const txDate = new Date(t.date);
+              return txDate.getTime() >= cycleStart.getTime();
+            });
+            setCurrentCyclePayoutHistory(currentPayouts);
+          } else {
+            // Fallback for legacy groups or first run
+            setCurrentCyclePayoutHistory(allPayouts);
+          }
 
         } catch (error) {
           console.error("Failed to fetch payout history:", error);
           setCurrentCyclePayoutHistory([]);
+          setAllTimePayoutHistory([]);
         }
       }
     };
     fetchPayoutHistory();
-  }, [group?.id, onRefresh]);
+  }, [group?.id, group?.cycleStartDate, group?.totalPool, onRefresh]);
 
   useEffect(() => {
     const fetchGroupContributions = async () => {
@@ -296,8 +301,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   const handleStartNewCycle = async (randomize = false) => {
     setIsStartingNewCycle(true);
     try {
-      const newSchedule = await db.startNewPayoutCycle(group.id, randomize);
+      const { newSchedule, cycleStartDate, cycleEndDate } = await db.startNewPayoutCycle(group.id, randomize);
       setPayoutOrder(newSchedule);
+      
+      // Update local group state immediately to reflect new cycle
+      setGroup(prev => ({
+          ...prev,
+          payoutSchedule: newSchedule,
+          cycleStartDate: cycleStartDate,
+          cycleEndDate: cycleEndDate
+      }));
+
       if (onRefresh) onRefresh();
       alert("New payout cycle started successfully");
     } catch (error) {
@@ -684,7 +698,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
               )) : (
                 <div className="text-center py-8 text-gray-500">
                   <FileDown className="w-8 h-8 mx-auto mb-2 text-gray-400"/>
-                  No payouts have been made in this cycle yet.
+                  No payout history found.
                 </div>
               )}
             </div>
@@ -835,7 +849,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                       {filteredContributionTransactions.length > 0 ? filteredContributionTransactions.map(tx => (
                           <tr key={tx.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                              <td className="px-6 py-4">{tx.date}</td>
+                              <td className="px-6 py-4">{new Date(tx.date).toLocaleDateString()} {new Date(tx.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
                               <td className="px-6 py-4 font-medium">{tx.userName}</td>
                               <td className="px-6 py-4 font-bold">{moneyFormatter(tx.amount, group.currency)}</td>
                               <td className="px-6 py-4"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tx.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{tx.status}</span></td>
@@ -874,7 +888,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                       {adminPersonalTransactions.length > 0 ? adminPersonalTransactions.map(tx => (
                           <tr key={tx.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                              <td className="px-6 py-4">{tx.date}</td>
+                              <td className="px-6 py-4">{new Date(tx.date).toLocaleDateString()}</td>
                               <td className="px-6 py-4">
                                 <span className={`px-2 py-0.5 rounded text-xs font-bold ${
                                     tx.type === 'CONTRIBUTION' ? 'bg-blue-100 text-blue-700' :
@@ -1124,7 +1138,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                   )) : (
                     <div className="text-center py-8 text-gray-500">
                       <FileDown className="w-8 h-8 mx-auto mb-2 text-gray-400"/>
-                      No payouts have been made in this cycle yet.
+                      No payout history found.
                     </div>
                   )}
                 </div>

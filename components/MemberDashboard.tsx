@@ -574,7 +574,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                                         {t.type}
                                     </span>
                                 </td>
-                                <td className="px-6 py-4 text-gray-600 dark:text-gray-300">{t.date}</td>
+                                <td className="px-6 py-4 text-gray-600 dark:text-gray-300">{new Date(t.date).toLocaleDateString()}</td>
+                                <td className="px-6 py-4 text-gray-600 dark:text-gray-300">{new Date(t.date).toLocaleDateString()}</td>
                                 <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
                                     {(t.type === 'PAYOUT' || t.type === 'DEPOSIT') ? '+' : '-'}{group.currency} {t.amount}
                                 </td>
@@ -681,7 +682,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                         <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                             {userTransactions.filter(t => t.type === 'WITHDRAWAL').map(tx => (
                                 <tr key={tx.id}>
-                                    <td className="px-6 py-4 text-gray-900 dark:text-white">{tx.date}</td>
+                                    <td className="px-6 py-4 text-gray-900 dark:text-white">{new Date(tx.date).toLocaleDateString()}</td>
                                     <td className="px-6 py-4 font-bold text-gray-900 dark:text-white">{group.currency} {tx.amount}</td>
                                     <td className="px-6 py-4">
                                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">

@@ -560,10 +560,7 @@ app.post('/api/groups/:groupId/new-cycle', async (req, res) => {
     try {
         await connection.beginTransaction();
 
-        // 1. Delete all "payout" transactions for this group
-        await connection.query('DELETE FROM transactions WHERE group_id = ? AND type = "PAYOUT"', [groupId]);
-
-        // 2. Get all active members of the group (excluding SUPERUSER)
+        // 1. Get all active members of the group (excluding SUPERUSER)
         const [members] = await connection.query(
             `SELECT gm.user_id 
              FROM group_memberships gm
@@ -605,14 +602,19 @@ app.post('/api/groups/:groupId/new-cycle', async (req, res) => {
 
         // 5. Update the payout_schedule, cycle_number, and dates for the group
         await connection.query(
-            'UPDATE savings_groups SET payout_schedule = ?, cycle_number = cycle_number + 1, cycle_start_date = ?, cycle_end_date = ? WHERE id = ?',
+            'UPDATE savings_groups SET payout_schedule = ?, cycle_number = COALESCE(cycle_number, 0) + 1, cycle_start_date = ?, cycle_end_date = ? WHERE id = ?',
             [JSON.stringify(newSchedule), startDate, endDate, groupId]
         );
 
         await connection.commit();
 
-        // 5. Return the new payout_schedule
-        res.json({ success: true, newSchedule });
+        // 5. Return the new payout_schedule and dates
+        res.json({ 
+            success: true, 
+            newSchedule,
+            cycleStartDate: startDate,
+            cycleEndDate: endDate
+        });
 
     } catch (error) {
         await connection.rollback();
