@@ -211,8 +211,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
     setWalletBalance(balance);
   }, [initialMembers, initialTransactions, initialGroup, currentUser.id]);
 
-  const activeMembers = members.filter(m => m.status === 'ACTIVE');
-  const pendingMembers = members.filter(m => m.status === 'PENDING');
+  const activeMembers = members.filter(m => m.status === 'ACTIVE' && m.role !== UserRole.SUPERUSER && memberIdSet.has(m.id));
+  const pendingMembers = members.filter(m => m.status === 'PENDING' && m.role !== UserRole.SUPERUSER && memberIdSet.has(m.id));
   const pendingTransactions = transactions.filter(t => t.status === 'PENDING' && t.type === 'CONTRIBUTION');
   
   const cycleTarget = activeMembers.length * group.contributionAmount;
