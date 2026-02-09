@@ -625,6 +625,11 @@ class DatabaseService {
       return false;
     }
 
+    // Alias for deleteMembership to match AdminDashboard interface
+    async removeMemberFromGroup(groupId: string, userId: string): Promise<boolean> {
+      return this.deleteMembership(groupId, userId);
+    }
+
     async deleteMembership(groupId: string, userId: string): Promise<boolean> {
       if (this.isServerOnline) {
         try {

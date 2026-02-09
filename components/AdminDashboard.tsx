@@ -134,7 +134,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
     };
 
     fetchGroupMembers();
-  }, [group?.id]);
+  }, [group?.id, onRefresh]);
 
   useEffect(() => {
     const fetchPayoutHistory = async () => {
@@ -289,6 +289,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
         alert("Invitation failed. Server unreachable.");
     } finally {
         setIsInviting(false);
+    }
+  };
+
+  const handleRemoveMemberFromGroup = async (userId: string) => {
+    try {
+        await db.removeMemberFromGroup(group.id, userId);
+        
+        // Update local state immediately
+        setMemberIdSet(prev => {
+            const next = new Set(prev);
+            next.delete(userId);
+            return next;
+        });
+        
+        if (onRefresh) onRefresh();
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        alert("Member removed from group.");
+    } catch (err) {
+        alert("Failed to remove member.");
     }
   };
 
@@ -506,7 +525,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
           return;
       }
 
-      const totalPayoutAmount = Object.values(payoutAmounts).reduce((sum, amount: string) => sum + (parseFloat(amount) || 0), 0);
+      const totalPayoutAmount = Object.values(payoutAmounts).reduce((sum: number, amount: string) => sum + (parseFloat(amount) || 0), 0);
       
       if (totalPayoutAmount > totalPoolNumber) {
           alert("The total allocated amount cannot exceed the group pool.");
@@ -998,6 +1017,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                   <div><button type="submit" className="px-6 py-3 bg-primary-600 text-white rounded-lg font-bold shadow-md"><Save className="w-4 h-4 mr-2 inline" /> Save Changes</button></div>
               </form>
           </div>
+
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+              <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-4">Manage Group Members</h3>
+              <div className="space-y-3">
+                  {activeMembers.map(member => (
+                      <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                          <div className="flex items-center gap-3">
+                              <img src={member.avatar} alt="" className="w-10 h-10 rounded-full" />
+                              <div>
+                                  <p className="font-medium text-gray-900 dark:text-white">{member.name}</p>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400">{member.role}</p>
+                              </div>
+                          </div>
+                          {member.role !== UserRole.ADMIN && (
+                              <button 
+                                  onClick={() => setConfirmDialog({
+                                      isOpen: true,
+                                      title: 'Remove Member',
+                                      message: `Are you sure you want to remove ${member.name} from the group?`,
+                                      type: 'danger',
+                                      onConfirm: () => handleRemoveMemberFromGroup(member.id)
+                                  })}
+                                  className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                  title="Remove from Group"
+                              >
+                                  <Trash2 className="w-4 h-4" />
+                              </button>
+                          )}
+                      </div>
+                  ))}
+                  {activeMembers.length === 0 && (
+                      <p className="text-sm text-gray-500 text-center py-4">No active members found.</p>
+                  )}
+              </div>
+          </div>
       </div>
   );
 
@@ -1238,7 +1292,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
         member.status === 'ACTIVE'
     );
     
-    const totalAllocated = Object.values(payoutAmounts).reduce((sum, amount: string) => sum + Number(amount || 0), 0);
+    const totalAllocated = Object.values(payoutAmounts).reduce((sum: number, amount: string) => sum + Number(amount || 0), 0);
     const remainder = group.totalPool - totalAllocated;
 
     return (

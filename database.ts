@@ -274,6 +274,25 @@ class MockDatabase {
     this.messages = [...this.messages, sysMsg];
   }
 
+  // Removes a member from a group (resets status to NEW)
+  removeMemberFromGroup(groupId: string, userId: string): boolean {
+      // In a real app, this would DELETE from user_groups table.
+      // In this mock, we reset the user's status to 'NEW' so they are no longer 'ACTIVE' in the group.
+      const user = this.members.find(m => m.id === userId);
+      if (user) {
+          this.updateUser(userId, { status: 'NEW' });
+          const group = this.groups.find(g => g.id === groupId);
+          if (group) {
+             group.membersCount = Math.max(0, group.membersCount - 1);
+             if (this.group.id === groupId) {
+                 this.group = group;
+             }
+          }
+          return true;
+      }
+      return false;
+  }
+
   // Authenticates a user by email (Simple mock implementation)
   authenticate(email: string): User | undefined {
     // MySQL database connection may be needed here
