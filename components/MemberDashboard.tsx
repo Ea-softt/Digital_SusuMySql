@@ -40,18 +40,35 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
   const [isProcessingWithdraw, setIsProcessingWithdraw] = useState(false);
 
   const [groupContributions, setGroupContributions] = useState<Transaction[]>([]);
+  const [memberIdSet, setMemberIdSet] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (group.id) {
         db.getGroupContributionTransactions(group.id).then(setGroupContributions);
+
+        // Fetch memberships to filter members list
+        fetch('/api/group-memberships')
+            .then(res => res.json())
+            .then((data: any[]) => {
+                const ids = new Set<string>();
+                if (Array.isArray(data)) {
+                    data.forEach(m => {
+                        if (m.group_id === group.id && m.status === 'ACTIVE') {
+                            ids.add(m.user_id);
+                        }
+                    });
+                }
+                setMemberIdSet(ids);
+            })
+            .catch(err => console.error("Error fetching memberships:", err));
     }
   }, [group.id, onRefresh]);
 
   // Filter out superusers from the members list used in this dashboard.
   // This enforces the exclusion at the data level for this view.
   const visibleMembers = useMemo(() => {
-    return members.filter(m => m.role !== UserRole.SUPERUSER);
-  }, [members]);
+    return members.filter(m => m.role !== UserRole.SUPERUSER && memberIdSet.has(m.id));
+  }, [members, memberIdSet]);
 
   // Filter the payout schedule to only include visible members
   const visibleSchedule = useMemo(() => {
@@ -633,8 +650,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                 </button>
                 <button 
                     onClick={handlePayContribution}
-                    disabled={isContributing}
-                    className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors disabled:opacity-70"
+                    disabled={isContributing || group.payoutSchedule.length === 0}
+                    className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                     {isContributing ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
                     Make Contribution
