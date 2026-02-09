@@ -108,6 +108,16 @@ async function initializeDatabase() {
             )
         `);
 
+        // Ensure is_blocked and is_deleted columns exist in group_memberships
+        const [gmBlocked] = await connection.query(`SHOW COLUMNS FROM group_memberships LIKE 'is_blocked'`);
+        if (gmBlocked.length === 0) {
+            await connection.query(`ALTER TABLE group_memberships ADD COLUMN is_blocked BOOLEAN DEFAULT 0`);
+        }
+        const [gmDeleted] = await connection.query(`SHOW COLUMNS FROM group_memberships LIKE 'is_deleted'`);
+        if (gmDeleted.length === 0) {
+            await connection.query(`ALTER TABLE group_memberships ADD COLUMN is_deleted BOOLEAN DEFAULT 0`);
+        }
+
         await connection.query(`
             CREATE TABLE IF NOT EXISTS transactions (
                 id VARCHAR(50) PRIMARY KEY,
@@ -428,9 +438,13 @@ app.post('/api/groups/join', async (req, res) => {
         );
 
         if (existing.length > 0) {
-            if (existing[0].status !== 'ACTIVE') {
+            if (existing[0].is_blocked) {
+                return res.status(403).json({ message: "You are blocked from joining this group." });
+            }
+            // Reactivate if not active or if it was soft-deleted
+            if (existing[0].status !== 'ACTIVE' || existing[0].is_deleted) {
                  await connection.query(
-                    'UPDATE group_memberships SET status = \'ACTIVE\' WHERE user_id = ? AND group_id = ?',
+                    'UPDATE group_memberships SET status = \'ACTIVE\', is_deleted = 0 WHERE user_id = ? AND group_id = ?',
                     [userId, groupId]
                 );
             }
@@ -558,6 +572,48 @@ app.get('/api/group-memberships', async (req, res) => {
         const [rows] = await pool.query('SELECT * FROM group_memberships');
         res.json(rows);
     } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// --- MEMBER SELF-MANAGEMENT ---
+
+app.post('/api/group-membership/leave', async (req, res) => {
+    const { userId, groupId } = req.body;
+    try {
+        // Soft delete / Suspend: User can rejoin later
+        await pool.query(
+            'UPDATE group_memberships SET status = ?, is_deleted = 0 WHERE user_id = ? AND group_id = ?',
+            ['SUSPENDED', userId, groupId]
+        );
+        // Update member count
+        await pool.query(
+            `UPDATE savings_groups SET members_count = (SELECT COUNT(*) FROM group_memberships WHERE group_id = ? AND status = 'ACTIVE') WHERE id = ?`,
+            [groupId, groupId]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        console.error('POST /api/group-membership/leave error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.delete('/api/group-membership/:groupId/:userId', async (req, res) => {
+    const { groupId, userId } = req.params;
+    try {
+        // Hard delete: Removes record entirely
+        await pool.query(
+            'DELETE FROM group_memberships WHERE user_id = ? AND group_id = ?',
+            [userId, groupId]
+        );
+        // Update member count
+        await pool.query(
+            `UPDATE savings_groups SET members_count = (SELECT COUNT(*) FROM group_memberships WHERE group_id = ? AND status = 'ACTIVE') WHERE id = ?`,
+            [groupId, groupId]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        console.error('DELETE /api/group-membership error:', error);
         res.status(500).json({ error: error.message });
     }
 });

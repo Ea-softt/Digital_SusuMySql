@@ -606,6 +606,42 @@ class DatabaseService {
 
     }
 
+    async leaveGroup(groupId: string, userId: string): Promise<boolean> {
+      if (this.isServerOnline) {
+        try {
+          const res = await fetch(`${API_BASE}/group-membership/leave`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, groupId })
+          });
+          if (res.ok) {
+            await this.syncData(userId);
+            return true;
+          }
+        } catch (e) {
+          console.error("Leave group failed", e);
+        }
+      }
+      return false;
+    }
+
+    async deleteMembership(groupId: string, userId: string): Promise<boolean> {
+      if (this.isServerOnline) {
+        try {
+          const res = await fetch(`${API_BASE}/group-membership/${groupId}/${userId}`, {
+            method: 'DELETE'
+          });
+          if (res.ok) {
+            await this.syncData(userId);
+            return true;
+          }
+        } catch (e) {
+          console.error("Delete membership failed", e);
+        }
+      }
+      return false;
+    }
+
   }
 
 export const db = new DatabaseService();

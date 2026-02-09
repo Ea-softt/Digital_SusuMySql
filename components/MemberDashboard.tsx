@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Group, Transaction, User, UserRole } from '../types';
 import { StatsCard } from './StatsCard';
-import { Wallet, Calendar, PiggyBank, History, Search, ArrowRight, CheckCircle, Clock, ShieldAlert, UserCheck, LayoutDashboard, Users, DollarSign, Smartphone, Loader2, Lock, Copy, AlertTriangle, X, Shield } from 'lucide-react';
+import { Wallet, Calendar, PiggyBank, History, Search, ArrowRight, CheckCircle, Clock, ShieldAlert, UserCheck, LayoutDashboard, Users, DollarSign, Smartphone, Loader2, Lock, Copy, AlertTriangle, X, Shield, Settings, LogOut, Trash2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, AreaChart, Area, CartesianGrid, PieChart, Pie, Legend } from 'recharts';
 import { db } from '../services/database';
 import { moneyFormatter } from '../utils/formatters';
@@ -18,7 +18,7 @@ interface MemberDashboardProps {
   members: User[];
 }
 
-type Tab = 'overview' | 'members' | 'transactions' | 'withdraw' | 'schedule';
+type Tab = 'overview' | 'members' | 'transactions' | 'withdraw' | 'schedule' | 'settings';
 
 export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transactions, userId, onRefresh, currentUser, members }) => {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
@@ -939,6 +939,66 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
     );
   };
 
+  const handleLeaveGroup = async () => {
+      if (window.confirm("Are you sure you want to leave this group? You can join again later using the invite code.")) {
+          const success = await db.leaveGroup(group.id, userId);
+          if (success) {
+              alert("You have successfully left the group.");
+              if (onRefresh) onRefresh();
+          } else {
+              alert("Failed to leave group.");
+          }
+      }
+  };
+
+  const handleDeleteMembership = async () => {
+      if (window.confirm("Are you sure you want to permanently delete your membership from this group? This action cannot be undone.")) {
+          const success = await db.deleteMembership(group.id, userId);
+          if (success) {
+              alert("Your membership has been permanently deleted.");
+              if (onRefresh) onRefresh();
+          } else {
+              alert("Failed to delete membership.");
+          }
+      }
+  };
+
+  const renderSettings = () => (
+      <div className="space-y-6 animate-fade-in">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Membership Settings</h3>
+              
+              <div className="space-y-4">
+                  <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg flex flex-col md:flex-row justify-between items-center gap-4">
+                      <div>
+                          <h4 className="font-bold text-gray-800 dark:text-white">Leave Group</h4>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">Temporarily leave the group. You can rejoin later.</p>
+                      </div>
+                      <button 
+                          onClick={handleLeaveGroup}
+                          className="px-4 py-2 bg-orange-100 text-orange-700 hover:bg-orange-200 rounded-lg font-bold flex items-center gap-2 transition-colors"
+                      >
+                          <LogOut className="w-4 h-4" /> Leave Group
+                      </button>
+                  </div>
+
+                  <div className="p-4 border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/10 rounded-lg flex flex-col md:flex-row justify-between items-center gap-4">
+                      <div>
+                          <h4 className="font-bold text-red-800 dark:text-red-200">Delete Membership</h4>
+                          <p className="text-sm text-red-600 dark:text-red-300">Permanently remove yourself from this group.</p>
+                      </div>
+                      <button 
+                          onClick={handleDeleteMembership}
+                          className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-lg font-bold flex items-center gap-2 transition-colors"
+                      >
+                          <Trash2 className="w-4 h-4" /> Delete Membership
+                      </button>
+                  </div>
+              </div>
+          </div>
+      </div>
+  );
+
   return (
     <div className="space-y-6">
         {/* Navigation Tabs */}
@@ -948,7 +1008,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                 { id: 'members', label: 'Members', icon: Users },
                 { id: 'transactions', label: 'Transactions', icon: DollarSign },
                 { id: 'withdraw', label: 'Withdraw', icon: Smartphone },
-                { id: 'schedule', label: 'Schedule', icon: Calendar }
+                { id: 'schedule', label: 'Schedule', icon: Calendar },
+                { id: 'settings', label: 'Settings', icon: Settings }
             ].map((tab) => (
                 <button
                     key={tab.id}
@@ -972,6 +1033,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
             {activeTab === 'transactions' && renderTransactions()}
             {activeTab === 'withdraw' && renderWithdraw()}
             {activeTab === 'schedule' && renderSchedule()}
+            {activeTab === 'settings' && renderSettings()}
         </div>
         {renderWalletModal()}
     </div>
