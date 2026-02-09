@@ -98,11 +98,12 @@ class DatabaseService {
       type: t.type || 'CONTRIBUTION',
       amount: Number(t.amount || 0),
       date: t.date ? new Date(t.date).toISOString() : '',
-      status: t.status || 'PENDING'
+      status: t.status || 'PENDING',
+      groupId: t.group_id || undefined
     };
   }
 
-  async syncData(userId?: string): Promise<boolean> {
+  async syncData(userId?: string, activeGroupId?: string): Promise<boolean> {
     try {
       const healthRes = await fetch(`${API_BASE}/check-health`, { 
           signal: AbortSignal.timeout(3000) 
@@ -138,7 +139,10 @@ class DatabaseService {
               }
           }
 
-          const txRes = await fetch(`${API_BASE}/transactions/${userId}`);
+          const url = activeGroupId 
+            ? `${API_BASE}/transactions/${userId}?groupId=${activeGroupId}` 
+            : `${API_BASE}/transactions/${userId}`;
+          const txRes = await fetch(url);
           if (txRes.ok) {
               const remoteTxs = await txRes.json();
               this.transactions = Array.isArray(remoteTxs) ? remoteTxs.map((t: any) => this.mapTransaction(t)) : [];

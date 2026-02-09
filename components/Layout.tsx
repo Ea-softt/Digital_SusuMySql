@@ -37,13 +37,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentUser, onLogout,
   const notificationRef = useRef<HTMLDivElement>(null);
   const groupDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Filter groups to only show those where the user is an active member
-  const activeUserGroups = userGroups.filter(group => {
-    // Find the membership for this specific group
-    const membership = currentUser.memberships?.find(m => m.groupId === group.id);
-    // Only include the group if the membership exists and the status is 'ACTIVE'
-    return membership && membership.status === 'ACTIVE';
-  });
+  // Use the userGroups passed from App.tsx which are already fetched for this user
+  // This ensures newly joined groups appear immediately after refreshData()
+  const activeUserGroups = userGroups;
 
   // Initialize notifications based on user role
   useEffect(() => {

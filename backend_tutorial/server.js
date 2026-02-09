@@ -332,7 +332,17 @@ app.post('/api/transactions', async (req, res) => {
 
 app.get('/api/transactions/:userId', async (req, res) => {
     try {
-        const [rows] = await pool.query('SELECT * FROM transactions WHERE user_id = ? ORDER BY date DESC', [req.params.userId]);
+        const { groupId } = req.query;
+        let sql = 'SELECT * FROM transactions WHERE user_id = ?';
+        const params = [req.params.userId];
+
+        if (groupId) {
+            sql += ' AND group_id = ?';
+            params.push(groupId);
+        }
+
+        sql += ' ORDER BY date DESC';
+        const [rows] = await pool.query(sql, params);
         res.json(rows);
     } catch (error) {
         res.status(500).json({ error: error.message });

@@ -56,7 +56,7 @@ const App: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const refreshData = useCallback(async () => {
-    const success = currentUser ? await db.syncData(currentUser.id) : await db.syncData();
+    const success = currentUser ? await db.syncData(currentUser.id, activeGroup?.id) : await db.syncData();
     setServerOnline(db.getServerStatus());
 
     setDbMembers(db.getMembers());

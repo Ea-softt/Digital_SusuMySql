@@ -107,6 +107,7 @@ export interface Group {
 export interface Transaction {
   id: string;
   userId: string;
+  groupId?: string;
   userName: string;
   type: 'CONTRIBUTION' | 'PAYOUT' | 'WITHDRAWAL' | 'DEPOSIT' | 'FEE';
   amount: number;

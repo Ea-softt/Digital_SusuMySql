@@ -59,25 +59,31 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
   }, [group.payoutSchedule, visibleMembers]);
 
   // Derived Data
-  const userTransactions = transactions.filter(t => t.userId === userId).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  const totalContributed = userTransactions
+  // 1. Transactions specific to the ACTIVE group (Strict Isolation)
+  // We filter by groupId to ensure no cross-group data leakage.
+  const activeGroupTransactions = transactions
+    .filter(t => t.userId === userId && t.groupId === group.id)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const totalContributed = activeGroupTransactions
     .filter(t => t.type === 'CONTRIBUTION' && t.status === 'COMPLETED')
     .reduce((sum, t) => sum + t.amount, 0);
   
-  // Calculate "Wallet Balance" based on Payouts + Deposits minus Withdrawals
-  const totalPayoutsReceived = userTransactions
+  // Calculate "Wallet Balance" based on Payouts + Deposits mi us 
+  // This is now SCOPED to the active group to enforce strict isolation.
+  const totalPayoutsReceived = activeGroupTransactions
     .filter(t => t.type === 'PAYOUT' && t.status === 'COMPLETED')
     .reduce((sum, t) => sum + t.amount, 0);
   
-  const totalDeposits = userTransactions
+  const totalDeposits = activeGroupTransactions
     .filter(t => t.type === 'DEPOSIT' && t.status === 'COMPLETED')
     .reduce((sum, t) => sum + t.amount, 0);
 
-  const totalWithdrawals = userTransactions
+  const totalWithdrawals = activeGroupTransactions
     .filter(t => t.type === 'WITHDRAWAL' && t.status === 'COMPLETED')
     .reduce((sum, t) => sum + t.amount, 0);
 
-  const walletBalance = totalPayoutsReceived + totalDeposits - totalWithdrawals;
+  const walletBalance = totalPayoutsReceived + totalDeposits - totalWithdrawals - totalContributed;
 
   // --- ASYNC HANDLERS FOR MYSQL ---
 
@@ -129,7 +135,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
               type: 'CONTRIBUTION',
               amount: group.contributionAmount,
               date: new Date().toISOString().split('T')[0],
-              status: 'COMPLETED'
+              status: 'COMPLETED',
+              groupId: group.id
           };
           await db.addTransaction(newTx, group.id);
           if (onRefresh) onRefresh();
@@ -193,9 +200,10 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                 type: 'DEPOSIT',
                 amount: amount,
                 date: new Date().toISOString().split('T')[0],
-                status: 'PENDING' // Mobile Money transactions are initially pending
+                status: 'PENDING', // Mobile Money transactions are initially pending
+                groupId: group.id // Tag deposit to this group
            };
-           await db.addTransaction(newTx);
+           await db.addTransaction(newTx, group.id);
            if (onRefresh) onRefresh();
            setWalletModalOpen(false);
            setMomoDetails(prev => ({...prev, amount: ''}));
@@ -233,9 +241,10 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
               type: 'WITHDRAWAL',
               amount: amount,
               date: new Date().toISOString().split('T')[0],
-              status: 'COMPLETED'
+              status: 'COMPLETED',
+              groupId: group.id // Tag withdrawal to this group
           };
-          await db.addTransaction(newTx);
+          await db.addTransaction(newTx, group.id);
           setWithdrawAmount('');
           setWithdrawPassword('');
           if (onRefresh) onRefresh();
@@ -409,7 +418,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
         daysRemaining = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
         // Check contribution for THIS cycle
-        const cycleContributions = userTransactions.filter(t => 
+        const cycleContributions = activeGroupTransactions.filter(t => 
             t.type === 'CONTRIBUTION' && 
             t.status === 'COMPLETED' &&
             new Date(t.date).getTime() >= startDate!.getTime() &&
@@ -646,7 +655,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                        {userTransactions.length > 0 ? userTransactions.map(t => (
+                        {activeGroupTransactions.length > 0 ? activeGroupTransactions.map(t => (
                             <tr key={t.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                                 <td className="px-6 py-4 font-mono text-gray-500 dark:text-gray-400">#{t.id.toUpperCase()}</td>
                                 <td className="px-6 py-4">
@@ -703,6 +712,10 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                     <div>
                         <span className="block opacity-70">Deposits</span>
                         <span className="font-bold text-white">GHS {totalDeposits}</span>
+                    </div>
+                    <div>
+                        <span className="block opacity-70">Contributed</span>
+                        <span className="font-bold text-white">GHS {totalContributed}</span>
                     </div>
                     <div>
                         <span className="block opacity-70">Withdrawn</span>
@@ -764,8 +777,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                                 <th className="px-6 py-3">Status</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                            {userTransactions.filter(t => t.type === 'WITHDRAWAL').map(tx => (
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                            {activeGroupTransactions.filter(t => t.type === 'WITHDRAWAL').map(tx => (
                                 <tr key={tx.id}>
                                     <td className="px-6 py-4 text-gray-900 dark:text-white">{new Date(tx.date).toLocaleDateString()}</td>
                                     <td className="px-6 py-4 font-bold text-gray-900 dark:text-white">{group.currency} {tx.amount}</td>
@@ -776,7 +789,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                                     </td>
                                 </tr>
                             ))}
-                            {userTransactions.filter(t => t.type === 'WITHDRAWAL').length === 0 && (
+                            {activeGroupTransactions.filter(t => t.type === 'WITHDRAWAL').length === 0 && (
                                 <tr><td colSpan={3} className="p-6 text-center text-gray-500">No withdrawal history.</td></tr>
                             )}
                         </tbody>
