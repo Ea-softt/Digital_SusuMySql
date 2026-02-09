@@ -335,7 +335,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                                   type="text" 
                                   value={joinCode}
                                   onChange={(e) => setJoinCode(e.target.value)}
-                                  placeholder="e.g. SUSU-2024-FAM"
+                                  placeholder="e.g. SUSU-2024"
                                   className="w-full p-4 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500 font-mono text-center text-lg uppercase tracking-wider"
                                   required
                               />

@@ -306,10 +306,10 @@ const App: React.FC = () => {
         {currentView === 'join-group' && <JoinGroup userId={currentUser.id} onSuccess={refreshData} onCancel={userGroups.length > 0 ? () => handleGroupSwitch(userGroups[0]) : undefined} canCreateGroup={canCreateGroup} />}
         {currentView === 'help' && <HelpCenter />}
         {currentView === 'ai-help' && <AIHelpCenter />}
-        {currentView === 'chat' && activeGroup && <GroupChat currentUser={contextUser || currentUser} />}
+        {currentView === 'chat' && activeGroup && <GroupChat currentUser={contextUser || currentUser} activeGroup={activeGroup} />}
         {currentView === 'profile' && <ProfileSettings user={currentUser} onUpdateProfile={(data) => db.updateUser(currentUser.id, data).then(refreshData)} />}
         {currentView === 'create-profile' && <CreateUserProfile onSuccess={refreshData} onCancel={() => setCurrentView('dashboard')} />}
-        {currentView === 'transactions' && activeGroup && <TransactionHistory transactions={dbTransactions} currency={activeGroup.currency} />}
+        {currentView === 'transactions' && activeGroup && <TransactionHistory transactions={dbTransactions.filter(t => t.groupId === activeGroup.id)} currency={activeGroup.currency} />}
         {currentView === 'members' && activeGroup && contextUser?.role === UserRole.ADMIN && <AdminDashboard group={activeGroup} transactions={dbTransactions} members={dbMembers} currentUser={contextUser} onRefresh={refreshData} initialTab="members" />}
         {currentView === 'settings' && activeGroup && contextUser?.role === UserRole.ADMIN && <AdminDashboard group={activeGroup} transactions={dbTransactions} members={dbMembers} currentUser={contextUser} onRefresh={refreshData} initialTab="settings" />}
         {currentView === 'admin-mgmt' && contextUser?.role === UserRole.SUPERUSER && <SuperuserDashboard members={dbMembers} transactions={dbTransactions} groups={dbGroups} onRefresh={refreshData} currentUser={currentUser} />}

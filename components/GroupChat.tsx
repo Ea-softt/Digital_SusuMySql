@@ -1,22 +1,21 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, GroupMessage } from '../types';
+import { User, GroupMessage, Group } from '../types';
 import { db } from '../services/database';
-import { Send, Users, MoreVertical, Search, Smile, Paperclip } from 'lucide-react';
+import { Send, Users, MoreVertical, Smile, Paperclip } from 'lucide-react';
 
 const API_BASE = 'http://localhost:3001/api';
 
 interface GroupChatProps {
   currentUser: User;
+  activeGroup?: Group;
 }
 
-export const GroupChat: React.FC<GroupChatProps> = ({ currentUser }) => {
+export const GroupChat: React.FC<GroupChatProps> = ({ currentUser, activeGroup }) => {
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [inputText, setInputText] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showSearch, setShowSearch] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
-  const [selectedGroup, setSelectedGroup] = useState(db.getGroups()[0] || null);
+  const selectedGroup = activeGroup || null;
   const [membershipStatus, setMembershipStatus] = useState<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -42,12 +41,10 @@ export const GroupChat: React.FC<GroupChatProps> = ({ currentUser }) => {
   // Load messages initially and set up polling for "real-time" updates
   useEffect(() => {
     const loadMessages = async () => {
-      const msgs = await db.getGroupMessages();
-      // Only update if length changed to prevent constant re-renders during polling in this simple mock
-      setMessages(prev => {
-        if (prev.length !== msgs.length) return msgs;
-        return prev;
-      });
+      if (selectedGroup?.id) {
+        const msgs = await db.getGroupMessages(selectedGroup.id);
+        setMessages(msgs);
+      }
     };
 
     loadMessages();
@@ -145,8 +142,6 @@ export const GroupChat: React.FC<GroupChatProps> = ({ currentUser }) => {
             body: JSON.stringify({ userId: currentUser.id, groupId: selectedGroup.id })
           });
           if (res.ok) {
-            const newGroup = db.getGroups().find(g => g.id !== selectedGroup.id);
-            setSelectedGroup(newGroup || null);
             alert(`Deleted "${selectedGroup.name}".`);
             setShowMenu(false);
           }
@@ -198,12 +193,6 @@ export const GroupChat: React.FC<GroupChatProps> = ({ currentUser }) => {
     groupedMessages[dateKey].push(msg);
   });
 
-  // Filter groups by search query
-  const allGroups = db.getGroups();
-  const filteredGroups = searchQuery.trim()
-    ? allGroups.filter(g => g.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    : allGroups;
-
   return (
     <div className="flex flex-col h-[calc(100vh-140px)] md:h-[calc(100vh-100px)] bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
       {/* Chat Header */}
@@ -221,12 +210,6 @@ export const GroupChat: React.FC<GroupChatProps> = ({ currentUser }) => {
           </div>
         </div>
         <div className="flex items-center gap-2 relative">
-          <button 
-            onClick={() => setShowSearch(!showSearch)}
-            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-full transition-colors"
-          >
-            <Search className="w-5 h-5" />
-          </button>
           <div className="relative" ref={menuRef}>
             <button 
               onClick={() => setShowMenu(!showMenu)}
@@ -267,54 +250,6 @@ export const GroupChat: React.FC<GroupChatProps> = ({ currentUser }) => {
           </div>
         </div>
       </div>
-
-      {/* Group Search Bar */}
-      {showSearch && (
-        <div className="p-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 max-h-64 overflow-y-auto">
-          <div className="relative mb-3">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search groups..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              autoFocus
-              className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 dark:text-white"
-            />
-          </div>
-          <div className="space-y-2">
-            {filteredGroups.length > 0 ? (
-              filteredGroups.map(group => (
-                <button
-                  key={group.id}
-                  onClick={() => {
-                    setSelectedGroup(group);
-                    setShowSearch(false);
-                    setSearchQuery('');
-                  }}
-                  className={`w-full text-left p-3 rounded-lg border transition-all ${
-                    selectedGroup?.id === group.id
-                      ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-300 dark:border-primary-700'
-                      : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-gray-900 dark:text-white text-sm">{group.name}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{group.membersCount} members • {group.currency}</p>
-                    </div>
-                    {selectedGroup?.id === group.id && (
-                      <span className="text-primary-600 dark:text-primary-400 font-bold">✓</span>
-                    )}
-                  </div>
-                </button>
-              ))
-            ) : (
-              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-2">No groups found</p>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Messages Area */}
       <div 
