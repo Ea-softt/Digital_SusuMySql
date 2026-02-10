@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Group, Transaction, User, UserRole } from '../types';
 import { StatsCard } from './StatsCard';
-import { Wallet, Calendar, PiggyBank, History, Search, ArrowRight, CheckCircle, Clock, ShieldAlert, UserCheck, LayoutDashboard, Users, DollarSign, Smartphone, Loader2, Lock, Copy, AlertTriangle, X, Shield, Settings, LogOut, Trash2 } from 'lucide-react';
+import { Wallet, Calendar, PiggyBank, History, Search, ArrowRight, CheckCircle, Clock, ShieldAlert, UserCheck, LayoutDashboard, Users, DollarSign, Smartphone, Loader2, Lock, Copy, AlertTriangle, X, Shield, Settings, LogOut, Trash2, ArrowLeft } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, AreaChart, Area, CartesianGrid, PieChart, Pie, Legend } from 'recharts';
 import { db } from '../services/database';
 import { moneyFormatter } from '../utils/formatters';
@@ -25,6 +25,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
   const [joinCode, setJoinCode] = useState('');
   const [joinError, setJoinError] = useState('');
   const [isJoining, setIsJoining] = useState(false);
+  const [showWalletInNewState, setShowWalletInNewState] = useState(false);
 
   // Contribution State
   const [isContributing, setIsContributing] = useState(false);
@@ -75,18 +76,21 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
     return group.payoutSchedule.filter(id => visibleMembers.some(m => m.id === id));
   }, [group.payoutSchedule, visibleMembers]);
 
-  // Derived Data
-  // 1. Transactions specific to the ACTIVE group (Strict Isolation)
-  // We filter by groupId to ensure no cross-group data leakage.
-  const activeGroupTransactions = transactions
-    .filter(t => t.userId === userId && t.groupId === group.id)
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const isGlobalContext = currentUser.status === 'NEW' || !group.id;
+  const currency = group.currency || 'GHS';
+  const activeGroupTransactions = useMemo(() => {
+      const txs = isGlobalContext 
+        ? transactions.filter(t => t.userId === userId && !t.groupId)
+        : transactions.filter(t => t.userId === userId && t.groupId === group.id);
+      return txs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [transactions, userId, group.id, isGlobalContext]);
 
   const totalContributed = activeGroupTransactions
     .filter(t => t.type === 'CONTRIBUTION' && t.status === 'COMPLETED')
     .reduce((sum, t) => sum + t.amount, 0);
   
   // Calculate "Wallet Balance" based on Payouts + Deposits mi us 
+  // Calculate "Wallet Balance" based on Payouts + Deposits minus 
   // This is now SCOPED to the active group to enforce strict isolation.
   const totalPayoutsReceived = activeGroupTransactions
     .filter(t => t.type === 'PAYOUT' && t.status === 'COMPLETED')
@@ -138,7 +142,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
 
   const handlePayContribution = async () => {
       if (walletBalance < group.contributionAmount) {
-          alert(`Insufficient wallet balance. Please load ${group.currency} ${group.contributionAmount - walletBalance} first.`);
+          alert(`Insufficient wallet balance. Please load ${currency} ${group.contributionAmount - walletBalance} first.`);
           setWalletModalOpen(true);
           return;
       }
@@ -157,7 +161,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
           };
           await db.addTransaction(newTx, group.id);
           if (onRefresh) onRefresh();
-          alert(`Successfully contributed ${group.currency} ${group.contributionAmount}!`);
+          alert(`Successfully contributed ${currency} ${group.contributionAmount}!`);
       } catch (err) {
           alert("Payment failed. Please try again.");
       } finally {
@@ -200,7 +204,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                momoDetails.provider as any,
                phoneNumber,
                amount,
-               group.currency
+               currency
            );
 
            if (!paymentResult.success) {
@@ -218,9 +222,9 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                 amount: amount,
                 date: new Date().toISOString().split('T')[0],
                 status: 'PENDING', // Mobile Money transactions are initially pending
-                groupId: group.id // Tag deposit to this group
+                groupId: isGlobalContext ? undefined : group.id // Tag deposit to this group
            };
-           await db.addTransaction(newTx, group.id);
+           await db.addTransaction(newTx, isGlobalContext ? undefined : group.id);
            if (onRefresh) onRefresh();
            setWalletModalOpen(false);
            setMomoDetails(prev => ({...prev, amount: ''}));
@@ -259,13 +263,13 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
               amount: amount,
               date: new Date().toISOString().split('T')[0],
               status: 'COMPLETED',
-              groupId: group.id // Tag withdrawal to this group
+              groupId: isGlobalContext ? undefined : group.id // Tag withdrawal to this group
           };
-          await db.addTransaction(newTx, group.id);
+          await db.addTransaction(newTx, isGlobalContext ? undefined : group.id);
           setWithdrawAmount('');
           setWithdrawPassword('');
           if (onRefresh) onRefresh();
-          alert(`Successfully withdrew ${group.currency} ${amount} to your Mobile Money wallet.`);
+          alert(`Successfully withdrew ${currency} ${amount} to your Mobile Money wallet.`);
       } catch (err) {
           alert("Withdrawal failed.");
       } finally {
@@ -276,6 +280,273 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
   const copyLink = () => {
     navigator.clipboard.writeText(`https://digitalsusu.app/join/${group.inviteCode}`);
     alert("Group invite link copied to clipboard!");
+  };
+
+  const renderTransactions = () => (
+    <div className="space-y-6 animate-fade-in">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                 <h3 className="text-lg font-bold text-gray-800 dark:text-white">My Transactions</h3>
+                 <p className="text-gray-500 dark:text-gray-400 text-sm">History of your contributions and payouts.</p>
+            </div>
+            <div className="flex gap-3">
+                <button
+                    onClick={() => {
+                        setMomoDetails(prev => ({...prev, number: currentUser.phoneNumber || ''}));
+                        setWalletModalOpen(true);
+                    }}
+                    className="bg-white dark:bg-gray-700 text-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors"
+                >
+                    <Smartphone className="w-4 h-4" /> Load Wallet
+                </button>
+                {!isGlobalContext && <button
+                    onClick={handlePayContribution}
+                    disabled={isContributing || group.payoutSchedule.length === 0}
+                    className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                    {isContributing ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
+                    Make Contribution
+                </button>
+                }
+            </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+            <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                    <thead className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                        <tr>
+                            <th className="px-6 py-4 font-medium">Transaction ID</th>
+                            <th className="px-6 py-4 font-medium">Type</th>
+                            <th className="px-6 py-4 font-medium">Date</th>
+                            <th className="px-6 py-4 font-medium">Amount</th>
+                            <th className="px-6 py-4 font-medium">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                        {activeGroupTransactions.length > 0 ? activeGroupTransactions.map(t => (
+                            <tr key={t.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                                <td className="px-6 py-4 font-mono text-gray-500 dark:text-gray-400">#{t.id.toUpperCase()}</td>
+                                <td className="px-6 py-4">
+                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                        t.type === 'CONTRIBUTION' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' : 
+                                        t.type === 'PAYOUT' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
+                                        t.type === 'DEPOSIT' ? 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300' :
+                                        'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
+                                    }`}>
+                                        {t.type}
+                                    </span>
+                                </td>
+                                <td className="px-6 py-4 text-gray-600 dark:text-gray-300">{new Date(t.date).toLocaleDateString()}</td>
+                                <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
+                                    {(t.type === 'PAYOUT' || t.type === 'DEPOSIT') ? '+' : '-'}{currency} {t.amount}
+                                </td>
+                                <td className="px-6 py-4">
+                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                        t.status === 'COMPLETED' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' : 
+                                        t.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                                    }`}>
+                                        <span className={`w-1.5 h-1.5 rounded-full ${
+                                            t.status === 'COMPLETED' ? 'bg-green-500' : 
+                                            t.status === 'PENDING' ? 'bg-yellow-500' : 'bg-red-500'
+                                        }`}></span>
+                                        {t.status}
+                                    </span>
+                                </td>
+                            </tr>
+                        )) : (
+                            <tr>
+                                <td colSpan={5} className="text-center py-8 text-gray-500">No transactions found.</td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+  );
+
+  const renderWithdraw = () => (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
+          <div className="space-y-6">
+            <div className="bg-gradient-to-br from-purple-900 to-indigo-900 rounded-xl p-6 text-white shadow-lg">
+                <p className="text-purple-200 text-sm font-medium mb-1">Available to Withdraw</p>                
+                <h2 className="text-4xl font-bold mb-4">{moneyFormatter(walletBalance, currency)}</h2>
+                <div className="flex gap-4 text-xs text-purple-200">
+                    <div>
+                        <span className="block opacity-70">Payouts</span>
+                        <span className="font-bold text-white">GHS {totalPayoutsReceived}</span>
+                    </div>
+                    <div>
+                        <span className="block opacity-70">Deposits</span>
+                        <span className="font-bold text-white">GHS {totalDeposits}</span>
+                    </div>
+                    <div>
+                        <span className="block opacity-70">Contributed</span>
+                        <span className="font-bold text-white">GHS {totalContributed}</span>
+                    </div>
+                    <div>
+                        <span className="block opacity-70">Withdrawn</span>
+                        <span className="font-bold text-white">GHS {totalWithdrawals}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
+                <h3 className="font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+                    <Smartphone className="w-5 h-5" /> Withdraw to Mobile Money
+                </h3>
+                <form onSubmit={handleWithdraw} className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount ({currency})</label>
+                        <input 
+                            type="number"
+                            value={withdrawAmount}
+                            onChange={e => setWithdrawAmount(e.target.value)}
+                            className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-transparent text-gray-900 dark:text-white"
+                            placeholder="0.00"
+                            max={walletBalance}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
+                        <div className="relative">
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <input 
+                                type="password"
+                                value={withdrawPassword}
+                                onChange={e => setWithdrawPassword(e.target.value)}
+                                className="w-full pl-10 pr-3 py-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-transparent text-gray-900 dark:text-white"
+                                placeholder="Enter password to confirm"
+                            />
+                        </div>
+                    </div>
+                    <button 
+                        type="submit"
+                        disabled={isProcessingWithdraw || walletBalance <= 0}
+                        className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold transition-all disabled:opacity-50 flex justify-center items-center gap-2"
+                    >
+                            {isProcessingWithdraw ? <Loader2 className="animate-spin w-5 h-5" /> : 'Confirm Withdrawal'}
+                    </button>
+                </form>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden flex flex-col">
+                <div className="p-6 border-b border-gray-100 dark:border-gray-700">
+                    <h3 className="font-bold text-gray-800 dark:text-white">Withdrawal History</h3>
+                </div>
+                <div className="flex-1 overflow-auto">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                            <tr>
+                                <th className="px-6 py-3">Date</th>
+                                <th className="px-6 py-3">Amount</th>
+                                <th className="px-6 py-3">Status</th>
+                            </tr>
+                        </thead>
+                  <tbody className="divide-y divide-gray-100 darke-gray-700">
+                            {activeGroupTransactions.filter(t => t.type === 'WITHDRAWAL').map(tx => (
+                                <tr key={tx.id}>
+                                    <td className="px-6 py-4 text-gray-900 dark:text-white">{new Date(tx.date).toLocaleDateString()}</td>
+                                    <td className="px-6 py-4 font-bold text-gray-900 dark:text-white">{currency} {tx.amount}</td>
+                                    <td className="px-6 py-4">
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                                            Completed
+                                        </span>
+                                    </td>
+                                </tr>
+                            ))}
+                            {activeGroupTransactions.filter(t => t.type === 'WITHDRAWAL').length === 0 && (
+                                <tr><td colSpan={3} className="p-6 text-center text-gray-500">No withdrawal history.</td></tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+          </div>
+      </div>
+  );
+
+  const renderWalletModal = () => {
+    if (!walletModalOpen) return null;
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full border border-gray-100 dark:border-gray-700 overflow-hidden">
+              <div className="p-6 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 flex justify-between items-center">
+                  <h3 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                       <Smartphone className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+                       Load Wallet via Mobile Money
+                  </h3>
+                  <button onClick={() => !isProcessingWallet && setWalletModalOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                      <X className="w-5 h-5" />
+                  </button>
+              </div>
+              
+              <div className="p-6 space-y-5">
+                  <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Select Provider</label>
+                      <div className="grid grid-cols-3 gap-3">
+                          {['MTN', 'Telecel', 'AT'].map(p => (
+                              <button
+                                  key={p}
+                                  onClick={() => setMomoDetails(prev => ({...prev, provider: p}))}
+                                  className={`py-2.5 rounded-lg border text-sm font-bold transition-all ${momoDetails.provider === p 
+                                      ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-500 text-primary-700 dark:text-primary-400 ring-1 ring-primary-500' 
+                                      : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                  }`}
+                              >
+                                  {p}
+                              </button>
+                          ))}
+                      </div>
+                  </div>
+
+                  <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Registered Mobile Money Number</label>
+                      <div className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700/50 text-gray-900 dark:text-white font-mono flex items-center justify-between">
+                          <span className="flex items-center gap-2">
+                              <Smartphone className="w-4 h-4 text-gray-500" />
+                              {normalizePhoneNumber(currentUser.phoneNumber || 'Not set')} 
+                          </span>
+                          <span className="text-[10px] font-bold uppercase text-gray-400 border border-gray-200 dark:border-gray-600 px-2 py-0.5 rounded">Verified</span>
+                      </div>
+                  </div>
+
+                  <div>
+                      <div className="flex items-center justify-between">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount ({currency})</label>
+                          {!isGlobalContext && <button
+                              type="button"
+                              onClick={() => setMomoDetails(prev => ({ ...prev, amount: String(group.contributionAmount) }))}
+                              className="text-sm text-primary-600 hover:underline"
+                          >
+                              Use contribution: {moneyFormatter(group.contributionAmount, currency)}
+                          </button>}
+                      </div>
+                      <input 
+                          type="number" 
+                          value={momoDetails.amount}
+                          onChange={(e) => setMomoDetails(prev => ({...prev, amount: e.target.value}))}
+                          placeholder="0.00"
+                          className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                  </div>
+              </div>
+
+              <div className="p-6 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30">
+                  <button 
+                      onClick={handleLoadWallet}
+                      disabled={isProcessingWallet || !currentUser.phoneNumber || !momoDetails.amount}
+                      className="w-full py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-bold shadow-lg transition-all disabled:opacity-70 flex items-center justify-center gap-2"
+                  >
+                      {isProcessingWallet ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
+                      {isProcessingWallet ? 'Processing Payment...' : 'Confirm Payment'}
+                  </button>
+              </div>
+          </div>
+      </div>
+    );
   };
 
   // --- EARLY RETURNS FOR VERIFICATION STATUS ---
@@ -298,8 +569,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                       <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-100 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-sm flex items-start gap-3 text-left">
                           <CheckCircle className="w-5 h-5 shrink-0 mt-0.5" />
                           <div>
-                            <p className="font-bold">What's Next?</p>
-                            <p className="mt-1">You will receive a notification once your KYC is approved. This usually takes 1-2 business days.</p>
+                                <p className="font-bold">What's Next?</p>
+                              <p className="mt-1">You will receive a notification once your KYC is approved. This usually takes 1-2 business days.</p>
                           </div>
                       </div>
                       <button 
@@ -317,45 +588,72 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
   // --- EARLY RETURNS FOR GROUP STATUS ---
 
   if (currentUser.status === 'NEW') {
+      if (showWalletInNewState) {
+          return (
+              <div className="space-y-6 animate-fade-in p-6">
+                  <div className="flex items-center gap-4 mb-6">
+                      <button 
+                          onClick={() => setShowWalletInNewState(false)}
+                          className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+                      >
+                          <ArrowLeft className="w-6 h-6 text-gray-600 dark:text-gray-300" />
+                      </button>
+                      <h2 className="text-2xl font-bold text-gray-900 dark:text-white">My Wallet</h2>
+                  </div>
+                  {renderWithdraw()}
+                  {renderTransactions()}
+                  {renderWalletModal()}
+              </div>
+          );
+      }
+
       return (
           <div className="max-w-md mx-auto mt-10">
-              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
-                  <div className="bg-primary-600 p-8 text-center">
+                  <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+                      <div className="bg-primary-600 p-8 text-center">
                       <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
                           <Search className="w-8 h-8 text-white" />
                       </div>
                       <h2 className="text-2xl font-bold text-white">Join a Susu Group</h2>
                       <p className="text-primary-100 text-sm mt-2">Enter the unique code or group name provided by your admin.</p>
                   </div>
-                  <div className="p-8">
-                      <form onSubmit={handleJoinGroup} className="space-y-6">
-                          <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Group Code or Name</label>
-                              <input 
-                                  type="text" 
-                                  value={joinCode}
-                                  onChange={(e) => setJoinCode(e.target.value)}
-                                  placeholder="e.g. SUSU-2024"
-                                  className="w-full p-4 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500 font-mono text-center text-lg uppercase tracking-wider"
-                                  required
-                              />
-                          </div>
-                          
-                          {joinError && (
-                              <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-lg flex items-center gap-2 justify-center">
-                                  <ShieldAlert className="w-4 h-4" /> {joinError}
+                      <div className="p-8">
+                          <form onSubmit={handleJoinGroup} className="space-y-6">
+                              <div>
+                                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Group Code or Name</label>
+                                  <input
+                                      type="text"
+                                      value={joinCode}
+                                      onChange={(e) => setJoinCode(e.target.value)}
+                                      placeholder="e.g. SUSU-2024-FAM"
+                                      className="w-full p-4 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500 font-mono text-center text-lg uppercase tracking-wider"
+                                      required
+                                  />
                               </div>
-                          )}
 
+                              {joinError && (
+                                  <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-lg flex items-center gap-2 justify-center">
+                                      <ShieldAlert className="w-4 h-4" /> {joinError}
+                                  </div>
+                              )}
+
+                              <button
+                                  type="submit"
+                                  disabled={isJoining}
+                                  className="w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-4 rounded-xl shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2 disabled:opacity-70"
+                              >
+                                  {isJoining ? 'Sending Request...' : 'Send Join Request'}
+                                  {!isJoining && <ArrowRight className="w-5 h-5" />}
+                              </button>
+                          </form>
+                      <div className="mt-6 pt-6 border-t border-gray-100 dark:border-gray-700 text-center">
                           <button 
-                              type="submit" 
-                              disabled={isJoining}
-                              className="w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-4 rounded-xl shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2 disabled:opacity-70"
+                              onClick={() => setShowWalletInNewState(true)}
+                              className="text-primary-600 dark:text-primary-400 font-bold hover:underline flex items-center justify-center gap-2 mx-auto"
                           >
-                              {isJoining ? 'Sending Request...' : 'Send Join Request'}
-                              {!isJoining && <ArrowRight className="w-5 h-5" />}
+                              <Wallet className="w-5 h-5" /> Access My Wallet
                           </button>
-                      </form>
+                      </div>
                   </div>
               </div>
           </div>
@@ -448,7 +746,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
 
     // Calculate Payment Progress for the Group
     const cycleStartTime = startDate ? startDate.getTime() : new Date().getTime();
-    const currentCycleContribs = groupContributions.filter(t => 
+    const currentCycleContribs = groupContributions.filter(t =>
         new Date(t.date).getTime() >= cycleStartTime && t.status === 'COMPLETED'
     );
     const paidMemberIds = new Set(currentCycleContribs.map(t => t.userId));
@@ -461,7 +759,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <StatsCard
             title="Total Contributed"
-            value={moneyFormatter(totalContributed, group.currency)}
+            value={moneyFormatter(totalContributed, currency)}
             icon={PiggyBank}
             color="bg-primary-600"
             />
@@ -475,7 +773,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
             />
             <StatsCard
             title="My Wallet Balance"
-            value={moneyFormatter(walletBalance, group.currency)}
+            value={moneyFormatter(walletBalance, currency)}
             icon={Wallet}
             color="bg-purple-600"
             />
@@ -596,14 +894,14 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                               <th className="px-6 py-4 font-medium">Reliability</th>
                           </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                          {visibleMembers.map(member => (
-                              <tr key={member.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                  <td className="px-6 py-4">
-                                      <div className="flex items-center gap-3">
-                                          <img src={member.avatar} alt="" className="w-8 h-8 rounded-full" />
-                                          <div>
-                                              <p className="font-medium text-gray-900 dark:text-white">{member.name}</p>
+                       <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                           {visibleMembers.map(member => (
+                               <tr key={member.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                   <td className="px-6 py-4">
+                                       <div className="flex items-center gap-3">
+                                           <img src={member.avatar} alt="" className="w-8 h-8 rounded-full" />
+                                           <div>
+                                               <p className="font-medium text-gray-900 dark:text-white">{member.name}</p>
                                               <p className="text-xs text-gray-500 dark:text-gray-400">{member.occupation}</p>
                                           </div>
                                       </div>
@@ -627,191 +925,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                       </tbody>
                   </table>
               </div>
-          </div>
-      </div>
-  );
-
-  const renderTransactions = () => (
-    <div className="space-y-6 animate-fade-in">
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col md:flex-row justify-between items-center gap-4">
-            <div>
-                 <h3 className="text-lg font-bold text-gray-800 dark:text-white">My Transactions</h3>
-                 <p className="text-gray-500 dark:text-gray-400 text-sm">History of your contributions and payouts.</p>
-            </div>
-            <div className="flex gap-3">
-                <button
-                    onClick={() => {
-                        setMomoDetails(prev => ({...prev, number: currentUser.phoneNumber || ''}));
-                        setWalletModalOpen(true);
-                    }}
-                    className="bg-white dark:bg-gray-700 text-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors"
-                >
-                    <Smartphone className="w-4 h-4" /> Load Wallet
-                </button>
-                <button 
-                    onClick={handlePayContribution}
-                    disabled={isContributing || group.payoutSchedule.length === 0}
-                    className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
-                >
-                    {isContributing ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
-                    Make Contribution
-                </button>
-            </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-            <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                    <thead className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-                        <tr>
-                            <th className="px-6 py-4 font-medium">Transaction ID</th>
-                            <th className="px-6 py-4 font-medium">Type</th>
-                            <th className="px-6 py-4 font-medium">Date</th>
-                            <th className="px-6 py-4 font-medium">Amount</th>
-                            <th className="px-6 py-4 font-medium">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                        {activeGroupTransactions.length > 0 ? activeGroupTransactions.map(t => (
-                            <tr key={t.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                                <td className="px-6 py-4 font-mono text-gray-500 dark:text-gray-400">#{t.id.toUpperCase()}</td>
-                                <td className="px-6 py-4">
-                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                        t.type === 'CONTRIBUTION' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' : 
-                                        t.type === 'PAYOUT' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
-                                        t.type === 'DEPOSIT' ? 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300' :
-                                        'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
-                                    }`}>
-                                        {t.type}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 text-gray-600 dark:text-gray-300">{new Date(t.date).toLocaleDateString()}</td>
-                                <td className="px-6 py-4 text-gray-600 dark:text-gray-300">{new Date(t.date).toLocaleDateString()}</td>
-                                <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
-                                    {(t.type === 'PAYOUT' || t.type === 'DEPOSIT') ? '+' : '-'}{group.currency} {t.amount}
-                                </td>
-                                <td className="px-6 py-4">
-                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                        t.status === 'COMPLETED' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' : 
-                                        t.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
-                                    }`}>
-                                        <span className={`w-1.5 h-1.5 rounded-full ${
-                                            t.status === 'COMPLETED' ? 'bg-green-500' : 
-                                            t.status === 'PENDING' ? 'bg-yellow-500' : 'bg-red-500'
-                                        }`}></span>
-                                        {t.status}
-                                    </span>
-                                </td>
-                            </tr>
-                        )) : (
-                            <tr>
-                                <td colSpan={5} className="text-center py-8 text-gray-500">No transactions found.</td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-  );
-
-  const renderWithdraw = () => (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
-          <div className="space-y-6">
-            <div className="bg-gradient-to-br from-purple-900 to-indigo-900 rounded-xl p-6 text-white shadow-lg">
-                <p className="text-purple-200 text-sm font-medium mb-1">Available to Withdraw</p>
-                <h2 className="text-4xl font-bold mb-4">{moneyFormatter(walletBalance, group.currency)}</h2>
-                <div className="flex gap-4 text-xs text-purple-200">
-                    <div>
-                        <span className="block opacity-70">Payouts</span>
-                        <span className="font-bold text-white">GHS {totalPayoutsReceived}</span>
-                    </div>
-                    <div>
-                        <span className="block opacity-70">Deposits</span>
-                        <span className="font-bold text-white">GHS {totalDeposits}</span>
-                    </div>
-                    <div>
-                        <span className="block opacity-70">Contributed</span>
-                        <span className="font-bold text-white">GHS {totalContributed}</span>
-                    </div>
-                    <div>
-                        <span className="block opacity-70">Withdrawn</span>
-                        <span className="font-bold text-white">GHS {totalWithdrawals}</span>
-                    </div>
-                </div>
-            </div>
-
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
-                <h3 className="font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
-                    <Smartphone className="w-5 h-5" /> Withdraw to Mobile Money
-                </h3>
-                <form onSubmit={handleWithdraw} className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount ({group.currency})</label>
-                        <input 
-                            type="number"
-                            value={withdrawAmount}
-                            onChange={e => setWithdrawAmount(e.target.value)}
-                            className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-transparent text-gray-900 dark:text-white"
-                            placeholder="0.00"
-                            max={walletBalance}
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
-                        <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                            <input 
-                                type="password"
-                                value={withdrawPassword}
-                                onChange={e => setWithdrawPassword(e.target.value)}
-                                className="w-full pl-10 pr-3 py-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-transparent text-gray-900 dark:text-white"
-                                placeholder="Enter password to confirm"
-                            />
-                        </div>
-                    </div>
-                    <button 
-                        type="submit"
-                        disabled={isProcessingWithdraw || walletBalance <= 0}
-                        className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold transition-all disabled:opacity-50 flex justify-center items-center gap-2"
-                    >
-                            {isProcessingWithdraw ? <Loader2 className="animate-spin w-5 h-5" /> : 'Confirm Withdrawal'}
-                    </button>
-                </form>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden flex flex-col">
-                <div className="p-6 border-b border-gray-100 dark:border-gray-700">
-                    <h3 className="font-bold text-gray-800 dark:text-white">Withdrawal History</h3>
-                </div>
-                <div className="flex-1 overflow-auto">
-                    <table className="w-full text-left text-sm">
-                        <thead className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-                            <tr>
-                                <th className="px-6 py-3">Date</th>
-                                <th className="px-6 py-3">Amount</th>
-                                <th className="px-6 py-3">Status</th>
-                            </tr>
-                        </thead>
-                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                            {activeGroupTransactions.filter(t => t.type === 'WITHDRAWAL').map(tx => (
-                                <tr key={tx.id}>
-                                    <td className="px-6 py-4 text-gray-900 dark:text-white">{new Date(tx.date).toLocaleDateString()}</td>
-                                    <td className="px-6 py-4 font-bold text-gray-900 dark:text-white">{group.currency} {tx.amount}</td>
-                                    <td className="px-6 py-4">
-                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                                            Completed
-                                        </span>
-                                    </td>
-                                </tr>
-                            ))}
-                            {activeGroupTransactions.filter(t => t.type === 'WITHDRAWAL').length === 0 && (
-                                <tr><td colSpan={3} className="p-6 text-center text-gray-500">No withdrawal history.</td></tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
           </div>
       </div>
   );
@@ -848,7 +961,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                                 </div>
                              </div>
                              <div className="text-right font-bold text-gray-900 dark:text-white">
-                                {moneyFormatter(group.totalPool, group.currency)}
+                                {moneyFormatter(group.totalPool, currency)}
                              </div>
                         </div>
                     );
@@ -856,88 +969,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
           </div>
       </div>
   );
-
-  const renderWalletModal = () => {
-    if (!walletModalOpen) return null;
-
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full border border-gray-100 dark:border-gray-700 overflow-hidden">
-              <div className="p-6 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 flex justify-between items-center">
-                  <h3 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                       <Smartphone className="w-5 h-5 text-primary-600 dark:text-primary-400" />
-                       Load Wallet via Mobile Money
-                  </h3>
-                  <button onClick={() => !isProcessingWallet && setWalletModalOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
-                      <X className="w-5 h-5" />
-                  </button>
-              </div>
-              
-              <div className="p-6 space-y-5">
-                  <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Select Provider</label>
-                      <div className="grid grid-cols-3 gap-3">
-                          {['MTN', 'Telecel', 'AT'].map(p => (
-                              <button
-                                  key={p}
-                                  onClick={() => setMomoDetails(prev => ({...prev, provider: p}))}
-                                  className={`py-2.5 rounded-lg border text-sm font-bold transition-all ${momoDetails.provider === p 
-                                      ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-500 text-primary-700 dark:text-primary-400 ring-1 ring-primary-500' 
-                                      : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-                                  }`}
-                              >
-                                  {p}
-                              </button>
-                          ))}
-                      </div>
-                  </div>
-
-                  <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Registered Mobile Money Number</label>
-                      <div className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700/50 text-gray-900 dark:text-white font-mono flex items-center justify-between">
-                          <span className="flex items-center gap-2">
-                              <Smartphone className="w-4 h-4 text-gray-500" />
-                              {normalizePhoneNumber(currentUser.phoneNumber || 'Not set')} 
-                          </span>
-                          <span className="text-[10px] font-bold uppercase text-gray-400 border border-gray-200 dark:border-gray-600 px-2 py-0.5 rounded">Verified</span>
-                      </div>
-                  </div>
-
-                  <div>
-                      <div className="flex items-center justify-between">
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount ({group.currency})</label>
-                          <button
-                              type="button"
-                              onClick={() => setMomoDetails(prev => ({ ...prev, amount: String(group.contributionAmount) }))}
-                              className="text-sm text-primary-600 hover:underline"
-                          >
-                              Use contribution: {moneyFormatter(group.contributionAmount, group.currency)}
-                          </button>
-                      </div>
-                      <input 
-                          type="number" 
-                          value={momoDetails.amount}
-                          onChange={(e) => setMomoDetails(prev => ({...prev, amount: e.target.value}))}
-                          placeholder="0.00"
-                          className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
-                      />
-                  </div>
-              </div>
-
-              <div className="p-6 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30">
-                  <button 
-                      onClick={handleLoadWallet}
-                      disabled={isProcessingWallet || !currentUser.phoneNumber || !momoDetails.amount}
-                      className="w-full py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-bold shadow-lg transition-all disabled:opacity-70 flex items-center justify-center gap-2"
-                  >
-                      {isProcessingWallet ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
-                      {isProcessingWallet ? 'Processing Payment...' : 'Confirm Payment'}
-                  </button>
-              </div>
-          </div>
-      </div>
-    );
-  };
 
   const handleLeaveGroup = async () => {
       if (window.confirm("Are you sure you want to leave this group? You can join again later using the invite code.")) {

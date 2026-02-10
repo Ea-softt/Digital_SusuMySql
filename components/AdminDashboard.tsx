@@ -730,12 +730,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                 <p className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{moneyFormatter(group.totalPool, group.currency)}</p>
                 <p className="text-sm text-gray-500 dark:text-gray-400">Total funds collected from members for the current cycle.</p>
                 <div className="mt-4">
-                    <button 
-                        onClick={() => setIsSplitPayoutModalOpen(true)}
-                        disabled={group.totalPool <= 0}
-                        disabled={group.totalPool <= 0 || isPayoutCycleComplete}
-                        className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
+                     <button 
+                         onClick={() => setIsSplitPayoutModalOpen(true)}
+                         disabled={group.totalPool <= 0 || isPayoutCycleComplete}
+                         className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                     >
                         <Shuffle className="w-4 h-4" /> Distribute Payout
                     </button>
                 </div>

@@ -1,0 +1,4 @@
+/* Intentionally minimal.
+   Tailwind is loaded via CDN in `index.html`, but Vite expects this file because
+   `index.html` references `/index.css`. */
+
