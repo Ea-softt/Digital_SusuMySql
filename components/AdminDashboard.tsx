@@ -525,7 +525,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
           return;
       }
 
-      const totalPayoutAmount = Object.values(payoutAmounts).reduce((sum: number, amount: string) => sum + (parseFloat(amount) || 0), 0);
+      const totalPayoutAmount = Object.values(payoutAmounts).map(v => parseFloat(v) || 0).reduce((sum, v) => sum + v, 0);
       
       if (totalPayoutAmount > totalPoolNumber) {
           alert("The total allocated amount cannot exceed the group pool.");
@@ -562,7 +562,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                       };
                   }).filter((tx): tx is Transaction => tx !== null);
                   
-                  if(payoutTransactions.length === 0) {
+                  if (payoutTransactions.length === 0) {
                       throw new Error("No valid payouts to process.");
                   }
 
@@ -570,9 +570,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                       await db.addTransaction(tx, group.id);
                   }
 
-                  await db.updateGroup(group.id, { ...group, totalPool: totalPoolNumber - Number(totalPayoutAmount) });
+                  await db.updateGroup(group.id, { ...group, totalPool: totalPoolNumber - totalPayoutAmount });
 
                   alert(`Payout successful! ${moneyFormatter(Number(totalPayoutAmount), group.currency)} distributed among ${payoutTransactions.length} members.`);
+                  alert(`Payout successful! ${moneyFormatter(Number(totalPayoutAmount), String(group.currency))} distributed among ${payoutTransactions.length} members.`);
                   if (onRefresh) onRefresh();
                   
                   setIsSplitPayoutModalOpen(false);
@@ -1291,8 +1292,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
         member.status === 'ACTIVE'
     );
     
-    const totalAllocated = Object.values(payoutAmounts).reduce((sum: number, amount: string) => sum + Number(amount || 0), 0);
-    const remainder = group.totalPool - totalAllocated;
+    const totalAllocated = Object.values(payoutAmounts).map(v => parseFloat(v) || 0).reduce((sum, v) => sum + v, 0);
+    const remainder = totalPoolNumber - totalAllocated;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
@@ -1310,15 +1311,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                     <div className="grid grid-cols-3 gap-4 text-center">
                          <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-700">
                             <p className="text-sm text-blue-600 dark:text-blue-300">Total Pool</p>
-                            <p className="text-2xl font-bold text-blue-800 dark:text-blue-200">{moneyFormatter(group.totalPool, group.currency)}</p>
+                            <p className="text-2xl font-bold text-blue-800 dark:text-blue-200">{moneyFormatter(totalPoolNumber, group.currency)}</p>
                         </div>
-                        <div className={`p-3 rounded-lg border ${Number(totalAllocated) > group.totalPool ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700' : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700'}`}>
-                            <p className={`text-sm ${Number(totalAllocated) > group.totalPool ? 'text-red-600 dark:text-red-300' : 'text-green-600 dark:text-green-300'}`}>Total Allocated</p>
-                            <p className={`text-2xl font-bold ${Number(totalAllocated) > group.totalPool ? 'text-red-800 dark:text-red-200' : 'text-green-800 dark:text-green-200'}`}>{moneyFormatter(totalAllocated, group.currency)}</p>
+                        <div className={`p-3 rounded-lg border ${totalAllocated > totalPoolNumber ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700' : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700'}`}>
+                            <p className={`text-sm ${totalAllocated > totalPoolNumber ? 'text-red-600 dark:text-red-300' : 'text-green-600 dark:text-green-300'}`}>Total Allocated</p>
+                            <p className={`text-2xl font-bold ${totalAllocated > totalPoolNumber ? 'text-red-800 dark:text-red-200' : 'text-green-800 dark:text-green-200'}`}>{moneyFormatter(totalAllocated, group.currency)}</p>
                         </div>
                          <div className="bg-gray-50 dark:bg-gray-900/20 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
                             <p className="text-sm text-gray-600 dark:text-gray-300">Remainder</p>
-                            <p className={`text-2xl font-bold ${remainder < 0 ? 'text-red-500' : 'text-gray-800 dark:text-gray-200'}`}>{moneyFormatter(remainder, group.currency)}</p>
+                            <p className={`text-2xl font-bold ${remainder < 0 ? 'text-red-500' : 'text-gray-800 dark:text-gray-200'}`}>{moneyFormatter(totalPoolNumber - totalAllocated, group.currency)}</p>
                         </div>
                     </div>
 
@@ -1368,7 +1369,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                     <button onClick={() => { setIsSplitPayoutModalOpen(false); setSelectedMembersForPayout([]); }} className="px-4 py-2 text-sm font-bold text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded-lg">Cancel</button>
                     <button 
                         onClick={handleSplitPayout} 
-                        disabled={isProcessingSplitPayout || selectedMembersForPayout.length === 0 || totalAllocated <= 0 || totalAllocated > group.totalPool}
+                        disabled={isProcessingSplitPayout || selectedMembersForPayout.length === 0 || totalAllocated <= 0 || totalAllocated > totalPoolNumber}
                         className="px-4 py-2 text-sm font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-lg flex items-center gap-2 disabled:opacity-50"
                     >
                          {isProcessingSplitPayout ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4"/>}
