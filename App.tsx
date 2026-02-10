@@ -163,7 +163,9 @@ const App: React.FC = () => {
         setCurrentView('dashboard');
     } else {
         setActiveGroup(null);
-        setCurrentView('join-group');
+        // For members, the dashboard itself handles the 'join group' view which includes wallet access.
+        // For admins, they need the dedicated create group view.
+        setCurrentView(user.role === UserRole.ADMIN ? 'join-group' : 'dashboard');
     }
     if (user.role === UserRole.SUPERUSER) setCurrentView('admin-mgmt');
   };
@@ -186,7 +188,8 @@ const App: React.FC = () => {
           localStorage.setItem(LAST_GROUP_KEY, group.id);
       } else {
           setActiveGroup(null);
-          setCurrentView('join-group');
+          // When user wants to join a new group, show the appropriate view.
+          setCurrentView(currentUser?.role === UserRole.ADMIN ? 'join-group' : 'dashboard');
           localStorage.removeItem(LAST_GROUP_KEY);
       }
   };
@@ -292,18 +295,18 @@ const App: React.FC = () => {
         );
     }
 
-    const canCreateGroup = currentUser.role === UserRole.ADMIN && userGroups.length === 0;
+    const dummyGroupForNewUser: Group = {id: '', name: 'No Group', contributionAmount: 0, currency: 'GHS', frequency: 'Monthly', nextPayoutDate: '', cycleNumber: 0, totalPool: 0, membersCount: 0, inviteCode: '', payoutSchedule: [], status: 'ACTIVE', reminderDaysBefore: 3};
 
     return (
       <Layout currentUser={contextUser || currentUser} onLogout={handleLogout} currentView={currentView} onNavigate={setCurrentView} isDarkMode={isDarkMode} toggleDarkMode={() => setIsDarkMode(!isDarkMode)} activeGroup={activeGroup} userGroups={userGroups} onSwitchGroup={handleGroupSwitch}>
         {/* Navigation Views */}
-        {currentView === 'dashboard' && activeGroup && contextUser && (
+        {currentView === 'dashboard' && contextUser && (
             <>
-                {contextUser.role === UserRole.MEMBER && <MemberDashboard group={activeGroup} transactions={dbTransactions} userId={currentUser.id} currentUser={contextUser} onRefresh={refreshData} members={dbMembers} />}
+                {contextUser.role === UserRole.MEMBER && <MemberDashboard group={activeGroup || dummyGroupForNewUser} transactions={dbTransactions} userId={currentUser.id} currentUser={contextUser} onRefresh={refreshData} members={dbMembers} />}
                 {contextUser.role === UserRole.ADMIN && <AdminDashboard group={activeGroup} transactions={dbTransactions} members={dbMembers} currentUser={contextUser} onRefresh={refreshData} initialTab="overview" />}
             </>
         )}
-        {currentView === 'join-group' && <JoinGroup userId={currentUser.id} onSuccess={refreshData} onCancel={userGroups.length > 0 ? () => handleGroupSwitch(userGroups[0]) : undefined} canCreateGroup={canCreateGroup} />}
+        {currentView === 'join-group' && <JoinGroup userId={currentUser.id} onSuccess={refreshData} onCancel={userGroups.length > 0 ? () => handleGroupSwitch(userGroups[0]) : undefined} canCreateGroup={currentUser.role === UserRole.ADMIN} />}
         {currentView === 'help' && <HelpCenter />}
         {currentView === 'ai-help' && <AIHelpCenter />}
         {currentView === 'chat' && activeGroup && <GroupChat currentUser={contextUser || currentUser} activeGroup={activeGroup} />}

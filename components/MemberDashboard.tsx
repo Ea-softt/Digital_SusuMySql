@@ -104,7 +104,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
     .filter(t => t.type === 'WITHDRAWAL' && t.status === 'COMPLETED')
     .reduce((sum, t) => sum + t.amount, 0);
 
-  const walletBalance = totalPayoutsReceived + totalDeposits - totalWithdrawals - totalContributed;
+  const walletBalance = totalPayoutsReceived + totalDeposits - totalWithdrawals;
 
   // --- ASYNC HANDLERS FOR MYSQL ---
 
@@ -157,7 +157,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
               amount: group.contributionAmount,
               date: new Date().toISOString().split('T')[0],
               status: 'COMPLETED',
-              groupId: group.id
+              groupId: group.id,
           };
           await db.addTransaction(newTx, group.id);
           if (onRefresh) onRefresh();
@@ -222,7 +222,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                 amount: amount,
                 date: new Date().toISOString().split('T')[0],
                 status: 'PENDING', // Mobile Money transactions are initially pending
-                groupId: isGlobalContext ? undefined : group.id // Tag deposit to this group
+                groupId: isGlobalContext ? undefined : group.id,
            };
            await db.addTransaction(newTx, isGlobalContext ? undefined : group.id);
            if (onRefresh) onRefresh();
@@ -263,7 +263,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
               amount: amount,
               date: new Date().toISOString().split('T')[0],
               status: 'COMPLETED',
-              groupId: isGlobalContext ? undefined : group.id // Tag withdrawal to this group
+              groupId: isGlobalContext ? undefined : group.id,
           };
           await db.addTransaction(newTx, isGlobalContext ? undefined : group.id);
           setWithdrawAmount('');
@@ -587,7 +587,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
 
   // --- EARLY RETURNS FOR GROUP STATUS ---
 
-  if (currentUser.status === 'NEW') {
+  if (isGlobalContext) {
       if (showWalletInNewState) {
           return (
               <div className="space-y-6 animate-fade-in p-6">
