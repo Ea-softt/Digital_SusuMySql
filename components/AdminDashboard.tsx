@@ -1305,7 +1305,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
 
     const activeMembersForPayout = members.filter(member =>
         member.role !== UserRole.SUPERUSER &&
-        groupMemberships[member.id] === 'ACTIVE'
+        groupMemberships[member.id] === 'ACTIVE' &&
+        member.status !== 'SUSPENDED'
     );
     
     const totalAllocated = Object.values(payoutAmounts).map(v => parseFloat(v) || 0).reduce((sum, v) => sum + v, 0);
