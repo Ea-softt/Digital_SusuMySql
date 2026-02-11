@@ -18,7 +18,7 @@ interface MemberDashboardProps {
   members: User[];
 }
 
-type Tab = 'overview' | 'members' | 'transactions' | 'withdraw' | 'schedule' | 'settings';
+type Tab = 'overview' | 'members' | 'transactions' | 'schedule' | 'settings';
 
 export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transactions, userId, onRefresh, currentUser, members }) => {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
@@ -337,6 +337,29 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                 }
             </div>
         </div>
+        
+        <div className="bg-gradient-to-br from-purple-900 to-indigo-900 rounded-xl p-6 text-white shadow-lg">
+            <p className="text-purple-200 text-sm font-medium mb-1">Available to Withdraw</p>                
+            <h2 className="text-4xl font-bold mb-4">{moneyFormatter(walletBalance, currency)}</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs text-purple-200">
+                <div>
+                    <span className="block opacity-70">Payouts</span>
+                    <span className="font-bold text-white">{currency} {totalPayoutsReceived}</span>
+                </div>
+                <div>
+                    <span className="block opacity-70">Deposits</span>
+                    <span className="font-bold text-white">{currency} {totalDeposits}</span>
+                </div>
+                <div>
+                    <span className="block opacity-70">Contributed</span>
+                    <span className="font-bold text-white">{currency} {totalGlobalContributions}</span>
+                </div>
+                <div>
+                    <span className="block opacity-70">Withdrawn</span>
+                    <span className="font-bold text-white">{currency} {totalWithdrawals}</span>
+                </div>
+            </div>
+        </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
             <div className="overflow-x-auto">
@@ -392,107 +415,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
         </div>
     </div>
   ); }
-
-  const renderWithdraw = () => (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
-          <div className="space-y-6">
-            <div className="bg-gradient-to-br from-purple-900 to-indigo-900 rounded-xl p-6 text-white shadow-lg">
-                <p className="text-purple-200 text-sm font-medium mb-1">Available to Withdraw</p>                
-                <h2 className="text-4xl font-bold mb-4">{moneyFormatter(walletBalance, currency)}</h2>
-                <div className="flex gap-4 text-xs text-purple-200">
-                    <div>
-                        <span className="block opacity-70">Payouts</span>
-                        <span className="font-bold text-white">GHS {totalPayoutsReceived}</span>
-                    </div>
-                    <div>
-                        <span className="block opacity-70">Deposits</span>
-                        <span className="font-bold text-white">GHS {totalDeposits}</span>
-                    </div>
-                    <div>
-                        <span className="block opacity-70">Contributed</span>
-                        <span className="font-bold text-white">GHS {totalGlobalContributions}</span>
-                    </div>
-                    <div>
-                        <span className="block opacity-70">Withdrawn</span>
-                        <span className="font-bold text-white">GHS {totalWithdrawals}</span>
-                    </div>
-                </div>
-            </div>
-
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
-                <h3 className="font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
-                    <Smartphone className="w-5 h-5" /> Withdraw to Mobile Money
-                </h3>
-                <form onSubmit={handleWithdraw} className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount ({currency})</label>
-                        <input 
-                            type="number"
-                            value={withdrawAmount}
-                            onChange={e => setWithdrawAmount(e.target.value)}
-                            className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-transparent text-gray-900 dark:text-white"
-                            placeholder="0.00"
-                            max={walletBalance}
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
-                        <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                            <input 
-                                type="password"
-                                value={withdrawPassword}
-                                onChange={e => setWithdrawPassword(e.target.value)}
-                                className="w-full pl-10 pr-3 py-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-transparent text-gray-900 dark:text-white"
-                                placeholder="Enter password to confirm"
-                            />
-                        </div>
-                    </div>
-                    <button 
-                        type="submit"
-                        disabled={isProcessingWithdraw || walletBalance <= 0}
-                        className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold transition-all disabled:opacity-50 flex justify-center items-center gap-2"
-                    >
-                            {isProcessingWithdraw ? <Loader2 className="animate-spin w-5 h-5" /> : 'Confirm Withdrawal'}
-                    </button>
-                </form>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden flex flex-col">
-                <div className="p-6 border-b border-gray-100 dark:border-gray-700">
-                    <h3 className="font-bold text-gray-800 dark:text-white">Withdrawal History</h3>
-                </div>
-                <div className="flex-1 overflow-auto">
-                    <table className="w-full text-left text-sm">
-                        <thead className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-                            <tr>
-                                <th className="px-6 py-3">Date</th>
-                                <th className="px-6 py-3">Amount</th>
-                                <th className="px-6 py-3">Status</th>
-                            </tr>
-                        </thead>
-                  <tbody className="divide-y divide-gray-100 darke-gray-700">
-                            {activeGroupTransactions.filter(t => t.type === 'WITHDRAWAL').map(tx => (
-                                <tr key={tx.id}>
-                                    <td className="px-6 py-4 text-gray-900 dark:text-white">{new Date(tx.date).toLocaleDateString()}</td>
-                                    <td className="px-6 py-4 font-bold text-gray-900 dark:text-white">{currency} {tx.amount}</td>
-                                    <td className="px-6 py-4">
-                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                                            Completed
-                                        </span>
-                                    </td>
-                                </tr>
-                            ))}
-                            {activeGroupTransactions.filter(t => t.type === 'WITHDRAWAL').length === 0 && (
-                                <tr><td colSpan={3} className="p-6 text-center text-gray-500">No withdrawal history.</td></tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-          </div>
-      </div>
-  );
 
   function renderWithdrawModal() {
     if (!withdrawModalOpen) return null;
@@ -1197,7 +1119,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                 { id: 'overview', label: 'Overview', icon: LayoutDashboard },
                 { id: 'members', label: 'Members', icon: Users },
                 { id: 'transactions', label: 'Transactions', icon: DollarSign },
-                { id: 'withdraw', label: 'Withdraw', icon: Smartphone },
                 { id: 'schedule', label: 'Schedule', icon: Calendar },
                 { id: 'settings', label: 'Settings', icon: Settings }
             ].map((tab) => (
@@ -1221,7 +1142,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
             {activeTab === 'overview' && renderOverview()}
             {activeTab === 'members' && renderMembers()}
             {activeTab === 'transactions' && renderTransactions()}
-            {activeTab === 'withdraw' && renderWithdraw()}
             {activeTab === 'schedule' && renderSchedule()}
             {activeTab === 'settings' && renderSettings()}
         </div>
