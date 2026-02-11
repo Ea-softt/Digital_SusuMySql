@@ -92,7 +92,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
 
   // --- Derived State for Payout Cycle ---
   const activeMembersInCycle = useMemo(() => 
-      members.filter(m => groupMemberships[m.id] === 'ACTIVE' && m.role !== UserRole.SUPERUSER),
+      members.filter(m => 
+        groupMemberships[m.id] === 'ACTIVE' && 
+        m.status !== 'SUSPENDED' && 
+        m.role !== UserRole.SUPERUSER
+      ),
       [members, groupMemberships]
   );
 
@@ -211,7 +215,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
     setWalletBalance(balance);
   }, [initialMembers, initialTransactions, initialGroup, currentUser.id]);
 
-  const activeMembers = members.filter(m => groupMemberships[m.id] === 'ACTIVE' && m.role !== UserRole.SUPERUSER);
+  const activeMembers = members.filter(m => groupMemberships[m.id] === 'ACTIVE' && m.status !== 'SUSPENDED' && m.role !== UserRole.SUPERUSER);
   const pendingMembers = members.filter(m => groupMemberships[m.id] === 'PENDING' && m.role !== UserRole.SUPERUSER);
   const pendingTransactions = transactions.filter(t => t.status === 'PENDING' && t.type === 'CONTRIBUTION');
   
@@ -1027,13 +1031,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
               <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-4">Manage Group Members</h3>
               <div className="space-y-3">
-                  {activeMembers.map(member => (
+                  {members.filter(m => groupMemberships[m.id] && m.role !== UserRole.SUPERUSER).map(member => (
                       <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                           <div className="flex items-center gap-3">
                               <img src={member.avatar} alt="" className="w-10 h-10 rounded-full" />
                               <div>
                                   <p className="font-medium text-gray-900 dark:text-white">{member.name}</p>
-                                  <p className="text-xs text-gray-500 dark:text-gray-400">{member.role}</p>
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">{member.role}</p>
+                                    {member.status === 'SUSPENDED' && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 rounded">System Suspended</span>}
+                                  </div>
                               </div>
                           </div>
                           {member.role !== UserRole.ADMIN && (
@@ -1472,7 +1479,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                 </div>
                  <div className="flex-shrink-0 p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex justify-end items-center gap-3">
                     {effectiveStatus === 'SUSPENDED' ? (
-                        <button onClick={() => setConfirmDialog({ isOpen: true, title: 'Reactivate Member', message: `Restore access for ${viewMember.name}?`, type: 'primary', onConfirm: () => handleApproveMember(viewMember.id) })} className="px-4 py-2 text-sm font-bold text-white bg-green-600 hover:bg-green-700 rounded-lg flex items-center gap-2"><CheckCircle className="w-4 h-4"/> Reactivate Member</button>
+                        viewMember.status === 'SUSPENDED' ? (
+                             <button disabled className="px-4 py-2 text-sm font-bold text-white bg-gray-400 dark:bg-gray-600 rounded-lg flex items-center gap-2 cursor-not-allowed opacity-70"><Lock className="w-4 h-4"/> System Suspended</button>
+                        ) : (
+                             <button onClick={() => setConfirmDialog({ isOpen: true, title: 'Reactivate Member', message: `Restore access for ${viewMember.name}?`, type: 'primary', onConfirm: () => handleApproveMember(viewMember.id) })} className="px-4 py-2 text-sm font-bold text-white bg-green-600 hover:bg-green-700 rounded-lg flex items-center gap-2"><CheckCircle className="w-4 h-4"/> Reactivate Member</button>
+                        )
                     ) : (
                         <button onClick={() => handleSuspendMember(viewMember.id)} className="px-4 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg flex items-center gap-2"><Trash2 className="w-4 h-4"/> Suspend Member</button>
                     )}
