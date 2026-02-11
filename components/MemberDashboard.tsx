@@ -34,6 +34,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
   const [walletModalOpen, setWalletModalOpen] = useState(false);
   const [momoDetails, setMomoDetails] = useState({ provider: 'MTN', number: currentUser.phoneNumber || '', amount: '' });
   const [isProcessingWallet, setIsProcessingWallet] = useState(false);
+  const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
 
   // Withdraw State
   const [withdrawAmount, setWithdrawAmount] = useState('');
@@ -290,7 +291,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
     alert("Group invite link copied to clipboard!");
   };
 
-  const renderTransactions = () => (
+  function renderTransactions() { return (
     <div className="space-y-6 animate-fade-in">
         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col md:flex-row justify-between items-center gap-4">
             <div>
@@ -306,6 +307,12 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                     className="bg-white dark:bg-gray-700 text-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors"
                 >
                     <Smartphone className="w-4 h-4" /> Load Wallet
+                </button>
+                <button
+                    onClick={() => setWithdrawModalOpen(true)}
+                    className="bg-white dark:bg-gray-700 text-gray-700 dark:text-white border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors"
+                >
+                    <ArrowRight className="w-4 h-4" /> Withdraw
                 </button>
                 {!isGlobalContext && <button
                     onClick={handlePayContribution}
@@ -372,7 +379,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
             </div>
         </div>
     </div>
-  );
+  ); }
 
   const renderWithdraw = () => (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
@@ -475,7 +482,74 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
       </div>
   );
 
-  const renderWalletModal = () => {
+  function renderWithdrawModal() {
+    if (!withdrawModalOpen) return null;
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full border border-gray-100 dark:border-gray-700 overflow-hidden">
+              <div className="p-6 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 flex justify-between items-center">
+                  <h3 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                       <Smartphone className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                       Withdraw Funds
+                  </h3>
+                  <button onClick={() => !isProcessingWithdraw && setWithdrawModalOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                      <X className="w-5 h-5" />
+                  </button>
+              </div>
+              
+              <div className="p-6 space-y-5">
+                  <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg border border-purple-100 dark:border-purple-800">
+                      <p className="text-sm text-purple-600 dark:text-purple-300 mb-1">Available Balance</p>
+                      <p className="text-2xl font-bold text-purple-800 dark:text-purple-100">{moneyFormatter(walletBalance, currency)}</p>
+                  </div>
+
+                  <form onSubmit={(e) => { handleWithdraw(e); setWithdrawModalOpen(false); }} id="withdraw-form" className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount ({currency})</label>
+                            <input 
+                                type="number"
+                                value={withdrawAmount}
+                                onChange={e => setWithdrawAmount(e.target.value)}
+                                className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
+                                placeholder="0.00"
+                                max={walletBalance}
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
+                            <div className="relative">
+                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                <input 
+                                    type="password"
+                                    value={withdrawPassword}
+                                    onChange={e => setWithdrawPassword(e.target.value)}
+                                    className="w-full pl-10 pr-3 py-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
+                                    placeholder="Enter password to confirm"
+                                    required
+                                />
+                            </div>
+                        </div>
+                  </form>
+              </div>
+
+              <div className="p-6 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30">
+                  <button 
+                      type="submit"
+                      form="withdraw-form"
+                      disabled={isProcessingWithdraw || walletBalance <= 0}
+                      className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold shadow-lg transition-all disabled:opacity-70 flex items-center justify-center gap-2"
+                  >
+                      {isProcessingWithdraw ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Confirm Withdrawal'}
+                  </button>
+              </div>
+          </div>
+      </div>
+    );
+  };
+
+  function renderWalletModal() {
     if (!walletModalOpen) return null;
 
     return (
@@ -625,9 +699,31 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                       </button>
                       <h2 className="text-2xl font-bold text-gray-900 dark:text-white">My Wallet</h2>
                   </div>
-                  {renderWithdraw()}
+                  <div className="bg-gradient-to-br from-purple-900 to-indigo-900 rounded-xl p-6 text-white shadow-lg">
+                        <p className="text-purple-200 text-sm font-medium mb-1">Available to Withdraw</p>                
+                        <h2 className="text-4xl font-bold mb-4">{moneyFormatter(walletBalance, currency)}</h2>
+                        <div className="flex gap-4 text-xs text-purple-200">
+                            <div>
+                                <span className="block opacity-70">Payouts</span>
+                                <span className="font-bold text-white">GHS {totalPayoutsReceived}</span>
+                            </div>
+                            <div>
+                                <span className="block opacity-70">Deposits</span>
+                                <span className="font-bold text-white">GHS {totalDeposits}</span>
+                            </div>
+                            <div>
+                                <span className="block opacity-70">Contributions</span>
+                                <span className="font-bold text-white">GHS {totalGlobalContributions}</span>
+                            </div>
+                            <div>
+                                <span className="block opacity-70">Withdrawn</span>
+                                <span className="font-bold text-white">GHS {totalWithdrawals}</span>
+                            </div>
+                        </div>
+                    </div>
                   {renderTransactions()}
                   {renderWalletModal()}
+                  {renderWithdrawModal()}
               </div>
           );
       }
@@ -1092,6 +1188,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
             {activeTab === 'settings' && renderSettings()}
         </div>
         {renderWalletModal()}
+        {renderWithdrawModal()}
     </div>
   );
 };
