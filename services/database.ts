@@ -293,7 +293,8 @@ class DatabaseService {
         icon: newGroupData.icon,
         total_pool: 0,
         members_count: 1,
-        status: newGroupData.status
+        status: newGroupData.status,
+        scheduled_payout_amount: newGroupData.scheduledPayoutAmount
     });
   }
 
@@ -628,7 +629,7 @@ class DatabaseService {
       return false;
     }
 
-    async updateGroupMembershipStatus(groupId: string, userId: string, status: 'ACTIVE' | 'PENDING' | 'SUSPENDED' | 'INVITED'): Promise<boolean> {
+    async updateGroupMembershipStatus(groupId: string, userId: string, status: 'ACTIVE' | 'PENDING' | 'SUSPENDED' | 'INVITED' | 'LEFT'): Promise<boolean> {
       if (this.isServerOnline) {
         try {
           const res = await fetch(`${API_BASE}/group-membership/status`, {

@@ -42,7 +42,7 @@ export interface GroupMembership {
   groupId: string;
   groupName: string;
   role: UserRole;
-  status: 'ACTIVE' | 'PENDING' | 'SUSPENDED' | 'INVITED' | 'NEW';
+  status: 'ACTIVE' | 'PENDING' | 'SUSPENDED' | 'INVITED' | 'NEW' | 'LEFT';
   joinDate: string;
   reliabilityScore?: number;
 }
@@ -101,6 +101,7 @@ export interface Group {
   status: 'ACTIVE' | 'PENDING_VERIFICATION' | 'REJECTED';
   cycleStartDate?: string;
   cycleEndDate?: string;
+  scheduledPayoutAmount?: number; // Estimated payout amount
 }
 
 // Any money movement is a Transaction
