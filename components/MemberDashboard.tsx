@@ -43,6 +43,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
 
   const [groupContributions, setGroupContributions] = useState<Transaction[]>([]);
   const [memberIdSet, setMemberIdSet] = useState<Set<string>>(new Set());
+  const [userGroupStatus, setUserGroupStatus] = useState<string | null>(null);
 
   useEffect(() => {
     if (group.id) {
@@ -63,8 +64,14 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                 setMemberIdSet(ids);
             })
             .catch(err => console.error("Error fetching memberships:", err));
+
+        // Fetch current user's specific status in this group
+        fetch(`/api/group-membership/status/${userId}/${group.id}`)
+            .then(res => res.json())
+            .then(data => setUserGroupStatus(data.status))
+            .catch(err => console.error("Error fetching user group status:", err));
     }
-  }, [group.id, onRefresh]);
+  }, [group.id, userId, onRefresh]);
 
   // Filter out superusers from the members list used in this dashboard.
   // This enforces the exclusion at the data level for this view.
@@ -667,7 +674,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
       );
   }
 
-  if (currentUser.status === 'SUSPENDED') {
+  if (currentUser.status === 'SUSPENDED' || (group.id && userGroupStatus === 'SUSPENDED')) {
       return (
           <div className="max-w-md mx-auto mt-10 text-center animate-fade-in">
               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-red-100 dark:border-red-900 p-8">
@@ -781,7 +788,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
       );
   }
 
-  if (currentUser.status === 'PENDING') {
+  if (currentUser.status === 'PENDING' || (group.id && userGroupStatus === 'PENDING')) {
       return (
           <div className="max-w-md mx-auto mt-10 text-center">
               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-yellow-100 dark:border-yellow-900 p-8">
@@ -798,7 +805,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
       );
   }
 
-  if (currentUser.status === 'INVITED') {
+  if (currentUser.status === 'INVITED' || (group.id && userGroupStatus === 'INVITED')) {
       return (
           <div className="max-w-md mx-auto mt-10">
                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-primary-100 dark:border-gray-700 overflow-hidden">
