@@ -29,6 +29,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
 
   // Contribution State
   const [isContributing, setIsContributing] = useState(false);
+  const [contributionConfirmOpen, setContributionConfirmOpen] = useState(false);
 
   // Wallet Load State
   const [walletModalOpen, setWalletModalOpen] = useState(false);
@@ -156,13 +157,16 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
       }
   };
 
-  const handlePayContribution = async () => {
+  const handlePayContribution = () => {
       if (walletBalance < group.contributionAmount) {
           alert(`Insufficient wallet balance. Please load ${currency} ${group.contributionAmount - walletBalance} first.`);
           setWalletModalOpen(true);
           return;
       }
+      setContributionConfirmOpen(true);
+  };
 
+  const confirmContribution = async () => {
       setIsContributing(true);
       try {
           const newTx: Transaction = {
@@ -177,6 +181,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
           };
           await db.addTransaction(newTx, group.id);
           if (onRefresh) onRefresh();
+          setContributionConfirmOpen(false);
           alert(`Successfully contributed ${currency} ${group.contributionAmount}!`);
       } catch (err) {
           alert("Payment failed. Please try again.");
@@ -637,6 +642,32 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
       </div>
     );
   };
+
+  function renderContributionConfirmModal() {
+    if (!contributionConfirmOpen) return null;
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-sm w-full p-6 border border-gray-100 dark:border-gray-700">
+              <div className="text-center mb-6">
+                  <div className="w-16 h-16 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <DollarSign className="w-8 h-8 text-primary-600 dark:text-primary-400" />
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Confirm Contribution</h3>
+                  <p className="text-gray-500 dark:text-gray-400">
+                      You are about to contribute <span className="font-bold text-gray-900 dark:text-white">{moneyFormatter(group.contributionAmount, currency)}</span> to the group pool.
+                  </p>
+              </div>
+              <div className="flex gap-3">
+                  <button onClick={() => setContributionConfirmOpen(false)} className="flex-1 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-white rounded-lg font-bold hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">Cancel</button>
+                  <button onClick={confirmContribution} disabled={isContributing} className="flex-1 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-bold shadow-lg transition-all flex items-center justify-center gap-2">
+                      {isContributing ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirm'}
+                  </button>
+              </div>
+          </div>
+      </div>
+    );
+  }
 
   // --- EARLY RETURNS FOR VERIFICATION STATUS ---
 
@@ -1196,6 +1227,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
         </div>
         {renderWalletModal()}
         {renderWithdrawModal()}
+        {renderContributionConfirmModal()}
     </div>
   );
 };
