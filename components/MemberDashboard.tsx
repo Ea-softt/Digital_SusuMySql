@@ -1082,7 +1082,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                                 </div>
                              </div>
                              <div className="text-right font-bold text-gray-900 dark:text-white">
-                                {moneyFormatter(group.totalPool, currency)}
+                                {moneyFormatter(group.scheduledPayoutAmount || 0, currency)}
                              </div>
                         </div>
                     );

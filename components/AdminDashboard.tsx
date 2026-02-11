@@ -1103,16 +1103,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
             return;
         }
 
-        const payoutAmount = group.totalPool;
-        if (walletBalance < payoutAmount) {
-            alert(`Insufficient funds for payout. Pool: ${moneyFormatter(payoutAmount, group.currency)}, Wallet: ${moneyFormatter(walletBalance, group.currency)}`);
+        const payoutAmount = (group.scheduledPayoutAmount && group.scheduledPayoutAmount > 0)
+            ? group.scheduledPayoutAmount
+            : group.totalPool;
+
+        if (group.totalPool < payoutAmount) {
+            alert(`Insufficient funds in the group pool for this payout. Required: ${moneyFormatter(payoutAmount, group.currency)}, Available: ${moneyFormatter(group.totalPool, group.currency)}`);
             return;
         }
 
         setConfirmDialog({
             isOpen: true,
             title: 'Confirm Manual Payout',
-            message: `Are you sure you want to send ${moneyFormatter(payoutAmount, group.currency)} to ${nextRecipient.name}?`,
+            message: `Are you sure you want to send ${moneyFormatter(payoutAmount, group.currency)} to ${
+                nextRecipient.name
+            }?`,
             type: 'warning',
             onConfirm: async () => {
                 setIsProcessingPayout(true);
@@ -1131,7 +1136,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
 
                     await db.addTransaction(newTx, group.id);
                     
-                    await db.updateGroup(group.id, { ...group, totalPool: 0 });
+                    await db.updateGroup(group.id, { ...group, totalPool: group.totalPool - payoutAmount });
 
                     alert(`Payout successful! ${nextRecipient.name} has been paid.`);
                     if (onRefresh) onRefresh();
@@ -1178,7 +1183,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                                <img src={nextRecipient.avatar} alt={nextRecipient.name} className="w-12 h-12 rounded-full border-2 border-white"/>
                                <div>
                                    <p className="font-bold text-lg text-primary-800 dark:text-primary-300">{nextRecipient.name}</p>
-                                   <p className="text-sm text-primary-600 dark:text-primary-400">Scheduled for <span className="font-bold">{moneyFormatter(group.totalPool, group.currency)}</span></p>
+                                   <p className="text-sm text-primary-600 dark:text-primary-400">Scheduled for <span className="font-bold">{moneyFormatter(group.scheduledPayoutAmount || 0, group.currency)}</span></p>
                                </div>
                            </div>
                             <button 
