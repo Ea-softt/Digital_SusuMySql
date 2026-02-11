@@ -757,7 +757,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
             </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+        {/* <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
             <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-6 flex items-center gap-2"><History className="w-5 h-5 text-gray-400"/> Payout History</h3>
             <div className="space-y-4">
               {allTimePayoutHistory.length > 0 ? allTimePayoutHistory.map(tx => (
@@ -783,7 +783,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                 </div>
               )}
             </div>
-        </div>
+        </div> */}
 
         <div className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl p-4 flex flex-col md:flex-row justify-between items-center gap-4 shadow-sm">
           <div className="relative w-full md:max-w-md">
@@ -1231,7 +1231,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                 </div>
             </div>
 
-            {/* Payout History Column */}
+            {/* Payout History Column payout */}
             <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                 <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-6 flex items-center gap-2"><History className="w-5 h-5 text-gray-400"/> Payout History</h3>
                 <div className="space-y-4">

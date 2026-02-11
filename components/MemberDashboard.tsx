@@ -78,6 +78,11 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
 
   const isGlobalContext = currentUser.status === 'NEW' || !group.id;
   const currency = group.currency || 'GHS';
+
+  const allUserTransactions = useMemo(() => 
+    transactions.filter(t => t.userId === userId).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()), 
+  [transactions, userId]);
+
   const activeGroupTransactions = useMemo(() => {
       const txs = isGlobalContext 
         ? transactions.filter(t => t.userId === userId && !t.groupId)
@@ -89,22 +94,24 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
     .filter(t => t.type === 'CONTRIBUTION' && t.status === 'COMPLETED')
     .reduce((sum, t) => sum + t.amount, 0);
   
-  // Calculate "Wallet Balance" based on Payouts + Deposits mi us 
-  // Calculate "Wallet Balance" based on Payouts + Deposits minus 
-  // This is now SCOPED to the active group to enforce strict isolation.
-  const totalPayoutsReceived = activeGroupTransactions
+  // Calculate "Wallet Balance" GLOBALLY to ensure consistency across groups
+  const totalPayoutsReceived = allUserTransactions
     .filter(t => t.type === 'PAYOUT' && t.status === 'COMPLETED')
     .reduce((sum, t) => sum + t.amount, 0);
   
-  const totalDeposits = activeGroupTransactions
+  const totalDeposits = allUserTransactions
     .filter(t => t.type === 'DEPOSIT' && t.status === 'COMPLETED')
     .reduce((sum, t) => sum + t.amount, 0);
 
-  const totalWithdrawals = activeGroupTransactions
+  const totalWithdrawals = allUserTransactions
     .filter(t => t.type === 'WITHDRAWAL' && t.status === 'COMPLETED')
     .reduce((sum, t) => sum + t.amount, 0);
 
-  const walletBalance = totalPayoutsReceived + totalDeposits - totalWithdrawals;
+  const totalGlobalContributions = allUserTransactions
+    .filter(t => t.type === 'CONTRIBUTION' && t.status === 'COMPLETED')
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const walletBalance = totalPayoutsReceived + totalDeposits - totalWithdrawals - totalGlobalContributions;
 
   // --- ASYNC HANDLERS FOR MYSQL ---
 
@@ -383,7 +390,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                     </div>
                     <div>
                         <span className="block opacity-70">Contributed</span>
-                        <span className="font-bold text-white">GHS {totalContributed}</span>
+                        <span className="font-bold text-white">GHS {totalGlobalContributions}</span>
                     </div>
                     <div>
                         <span className="block opacity-70">Withdrawn</span>
