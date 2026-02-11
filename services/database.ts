@@ -625,6 +625,25 @@ class DatabaseService {
       return false;
     }
 
+    async updateGroupMembershipStatus(groupId: string, userId: string, status: 'ACTIVE' | 'PENDING' | 'SUSPENDED' | 'INVITED'): Promise<boolean> {
+      if (this.isServerOnline) {
+        try {
+          const res = await fetch(`${API_BASE}/group-membership/status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, groupId, status })
+          });
+          if (res.ok) {
+            await this.syncData(userId, groupId);
+            return true;
+          }
+        } catch (e) {
+          console.error("Update membership status failed", e);
+        }
+      }
+      return false;
+    }
+
     // Alias for deleteMembership to match AdminDashboard interface
     async removeMemberFromGroup(groupId: string, userId: string): Promise<boolean> {
       return this.deleteMembership(groupId, userId);

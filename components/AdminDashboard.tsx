@@ -83,7 +83,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   const [groupContributionTransactions, setGroupContributionTransactions] = useState<Transaction[]>([]);
   const [currentCyclePayoutHistory, setCurrentCyclePayoutHistory] = useState<Transaction[]>([]);
   const [allTimePayoutHistory, setAllTimePayoutHistory] = useState<Transaction[]>([]);
-  const [memberIdSet, setMemberIdSet] = useState(new Set<string>());
+  const [groupMemberships, setGroupMemberships] = useState<Record<string, string>>({});
 
   // --- Transaction Filter & Sort State ---
   const [txSortOrder, setTxSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -92,8 +92,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
 
   // --- Derived State for Payout Cycle ---
   const activeMembersInCycle = useMemo(() => 
-      members.filter(m => memberIdSet.has(m.id) && m.status === 'ACTIVE' && m.role !== UserRole.SUPERUSER),
-      [members, memberIdSet]
+      members.filter(m => groupMemberships[m.id] === 'ACTIVE' && m.role !== UserRole.SUPERUSER),
+      [members, groupMemberships]
   );
 
   const paidUserIds = useMemo(() => 
@@ -115,26 +115,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
             if (response.ok) {
                 const allMemberships = await response.json();
                 if (Array.isArray(allMemberships)) {
-                    const currentMemberIds = new Set<string>();
+                    const memberships: Record<string, string> = {};
                     allMemberships.forEach((m: any) => {
                         if (m.group_id === group.id) {
-                            currentMemberIds.add(m.user_id);
+                            memberships[m.user_id] = m.status;
                         }
                     });
-                    setMemberIdSet(currentMemberIds);
+                    setGroupMemberships(memberships);
                 }
             } else {
                 console.error("Failed to fetch group memberships:", response.statusText);
-                setMemberIdSet(new Set<string>()); // Clear on failure
+                setGroupMemberships({}); // Clear on failure
             }
         } catch (error) {
             console.error("Could not fetch group memberships.", error);
-            setMemberIdSet(new Set<string>()); // Clear on error
+            setGroupMemberships({}); // Clear on error
         }
     };
 
     fetchGroupMembers();
-  }, [group?.id, onRefresh]);
+  }, [group?.id, members]);
 
   useEffect(() => {
     const fetchPayoutHistory = async () => {
@@ -211,8 +211,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
     setWalletBalance(balance);
   }, [initialMembers, initialTransactions, initialGroup, currentUser.id]);
 
-  const activeMembers = members.filter(m => m.status === 'ACTIVE' && m.role !== UserRole.SUPERUSER && memberIdSet.has(m.id));
-  const pendingMembers = members.filter(m => m.status === 'PENDING' && m.role !== UserRole.SUPERUSER && memberIdSet.has(m.id));
+  const activeMembers = members.filter(m => groupMemberships[m.id] === 'ACTIVE' && m.role !== UserRole.SUPERUSER);
+  const pendingMembers = members.filter(m => groupMemberships[m.id] === 'PENDING' && m.role !== UserRole.SUPERUSER);
   const pendingTransactions = transactions.filter(t => t.status === 'PENDING' && t.type === 'CONTRIBUTION');
   
   const cycleTarget = activeMembers.length * group.contributionAmount;
@@ -222,21 +222,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
 
   const handleApproveMember = async (id: string) => {
     try {
-        await db.updateUser(id, { status: 'ACTIVE' });
+        const success = await db.updateGroupMembershipStatus(group.id, id, 'ACTIVE');
+        if (!success) throw new Error("Failed to approve member.");
+
         if (onRefresh) onRefresh();
         setConfirmDialog(prev => ({ ...prev, isOpen: false }));
     } catch (err) {
-        alert("Action failed. Server error.");
+        alert(`Action failed: ${err instanceof Error ? err.message : "Server error."}`);
     }
   };
 
   const handleRejectMember = async (id: string) => {
     try {
-        await db.deleteUser(id);
+        const success = await db.removeMemberFromGroup(group.id, id);
+        if (!success) throw new Error("Failed to reject member.");
+
         if (onRefresh) onRefresh();
         setConfirmDialog(prev => ({ ...prev, isOpen: false }));
     } catch (err) {
-        alert("Action failed. Server error.");
+        alert(`Action failed: ${err instanceof Error ? err.message : "Server error."}`);
     }
   };
 
@@ -297,9 +301,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
         await db.removeMemberFromGroup(group.id, userId);
         
         // Update local state immediately
-        setMemberIdSet(prev => {
-            const next = new Set(prev);
-            next.delete(userId);
+        setGroupMemberships(prev => {
+            const next = { ...prev };
+            delete next[userId];
             return next;
         });
         
@@ -707,15 +711,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
       // and anyone whose status isn't 'ACTIVE'. Also filters by search term.
       const filteredMembers = members.filter(member =>
           member.role !== UserRole.SUPERUSER &&
-          memberIdSet.has(member.id) &&
-          member.status === 'ACTIVE' &&
+          (groupMemberships[member.id] === 'ACTIVE' || groupMemberships[member.id] === 'SUSPENDED') &&
           (member.name.toLowerCase().includes(searchTerm.toLowerCase()) || member.email.toLowerCase().includes(searchTerm.toLowerCase()))
       );
 
       const pendingMembersForCurrentGroup = members.filter(member =>
           member.role !== UserRole.SUPERUSER &&
-          memberIdSet.has(member.id) &&
-          member.status === 'PENDING' &&
+          groupMemberships[member.id] === 'PENDING' &&
           (member.name.toLowerCase().includes(searchTerm.toLowerCase()) || member.email.toLowerCase().includes(searchTerm.toLowerCase()))
       );
       
@@ -797,10 +799,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
           <table className="w-full text-left text-sm">
               <thead className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300"><tr><th className="px-6 py-4">Member</th><th className="px-6 py-4">Status</th><th className="px-6 py-4">Joined</th><th className="px-6 py-4">Reliability</th><th className="px-6 py-4 text-right">Actions</th></tr></thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-              {filteredMembers.map(member => (
+              {filteredMembers.map(member => {
+                  const groupStatus = groupMemberships[member.id];
+                  // A global suspension by a superuser should override the group-specific status.
+                  const effectiveStatus = member.status === 'SUSPENDED' ? 'SUSPENDED' : groupStatus;
+                  return (
                   <tr key={member.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                     <td className="px-6 py-4"><div className="flex items-center gap-3"><img src={member.avatar} alt="" className="w-8 h-8 rounded-full" /><div><p className="font-medium text-gray-900 dark:text-white">{member.name}</p><p className="text-xs text-gray-500 dark:text-gray-400">{member.email}</p></div></div></td>
-                    <td className="px-6 py-4"><span className={`px-2 py-1 rounded-full text-xs font-bold ${member.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{member.status}</span></td>
+                    <td className="px-6 py-4"><span className={`px-2 py-1 rounded-full text-xs font-bold ${effectiveStatus === 'ACTIVE' ? 'bg-green-100 text-green-700' : effectiveStatus === 'SUSPENDED' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{effectiveStatus}</span></td>
                     <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{member.joinDate}</td>
                     <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
@@ -810,7 +816,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                     </td>
                     <td className="px-6 py-4 text-right"><button onClick={() => setViewMember(member)} className="p-2 text-gray-400 hover:text-primary-600"><Eye className="w-5 h-5" /></button></td>
                   </tr>
-              ))}
+                  )})}
               </tbody>
           </table>
         </div>
@@ -1271,11 +1277,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
       type: 'danger',
       onConfirm: async () => {
         try {
-            await db.updateUser(id, { status: 'SUSPENDED' });
-            if (onRefresh) onRefresh();
-            setViewMember(null);
-            setConfirmDialog(prev => ({ ...prev, isOpen: false }));
-            alert("Member has been suspended.");
+            const success = await db.updateGroupMembershipStatus(group.id, id, 'SUSPENDED');
+            if (success) {
+                if (onRefresh) onRefresh();
+                setViewMember(null);
+                setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+                alert("Member has been suspended from the group.");
+            } else {
+                throw new Error("Server operation failed.");
+            }
         } catch (err) {
             alert("Action failed. Server error.");
         }
@@ -1288,8 +1298,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
 
     const activeMembersForPayout = members.filter(member =>
         member.role !== UserRole.SUPERUSER &&
-        memberIdSet.has(member.id) &&
-        member.status === 'ACTIVE'
+        groupMemberships[member.id] === 'ACTIVE'
     );
     
     const totalAllocated = Object.values(payoutAmounts).map(v => parseFloat(v) || 0).reduce((sum, v) => sum + v, 0);
@@ -1385,6 +1394,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
     if (!viewMember) return null;
 
     const memberTransactions = transactions.filter(t => t.userId === viewMember.id);
+    const groupStatus = groupMemberships[viewMember.id];
+    // A global suspension by a superuser should override the group-specific status.
+    const effectiveStatus = viewMember.status === 'SUSPENDED' ? 'SUSPENDED' : groupStatus;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
@@ -1405,7 +1417,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                             <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{viewMember.name}</h2>
                             <p className="text-gray-500 dark:text-gray-400">{viewMember.occupation || 'No occupation listed'}</p>
                             <div className="flex items-center gap-4 mt-2">
-                                <span className={`px-3 py-1 rounded-full text-xs font-bold ${viewMember.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{viewMember.status}</span>
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold ${effectiveStatus === 'ACTIVE' ? 'bg-green-100 text-green-700' : effectiveStatus === 'SUSPENDED' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{effectiveStatus}</span>
                                 <span className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-1"><ShieldCheck className="w-4 h-4 text-green-500" /> Reliability: {viewMember.reliabilityScore}%</span>
                             </div>
                         </div>
@@ -1459,7 +1471,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                     </div>
                 </div>
                  <div className="flex-shrink-0 p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex justify-end items-center gap-3">
-                    <button onClick={() => handleSuspendMember(viewMember.id)} className="px-4 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg flex items-center gap-2"><Trash2 className="w-4 h-4"/> Suspend Member</button>
+                    {effectiveStatus === 'SUSPENDED' ? (
+                        <button onClick={() => setConfirmDialog({ isOpen: true, title: 'Reactivate Member', message: `Restore access for ${viewMember.name}?`, type: 'primary', onConfirm: () => handleApproveMember(viewMember.id) })} className="px-4 py-2 text-sm font-bold text-white bg-green-600 hover:bg-green-700 rounded-lg flex items-center gap-2"><CheckCircle className="w-4 h-4"/> Reactivate Member</button>
+                    ) : (
+                        <button onClick={() => handleSuspendMember(viewMember.id)} className="px-4 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg flex items-center gap-2"><Trash2 className="w-4 h-4"/> Suspend Member</button>
+                    )}
                     <button className="px-4 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center gap-2"><UserCog className="w-4 h-4"/> Manage Member Roles</button>
                 </div>
             </div>

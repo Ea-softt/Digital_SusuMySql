@@ -484,6 +484,39 @@ app.get('/api/group-membership/status/:userId/:groupId', async (req, res) => {
     }
 });
 
+app.put('/api/group-membership/status', async (req, res) => {
+    const { userId, groupId, status } = req.body;
+    if (!userId || !groupId || !status) {
+        return res.status(400).json({ error: 'userId, groupId, and status are required.' });
+    }
+    const validStatuses = ['ACTIVE', 'PENDING', 'SUSPENDED', 'INVITED'];
+    if (!validStatuses.includes(status)) {
+        return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
+    }
+
+    try {
+        const [result] = await pool.query(
+            'UPDATE group_memberships SET status = ? WHERE user_id = ? AND group_id = ?',
+            [status, userId, groupId]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'Membership not found.' });
+        }
+        
+        // Recalculate members_count
+        await pool.query(
+            `UPDATE savings_groups SET members_count = (SELECT COUNT(*) FROM group_memberships WHERE group_id = ? AND status = 'ACTIVE') WHERE id = ?`,
+            [groupId, groupId]
+        );
+
+        res.json({ success: true, message: `Membership status updated.` });
+    } catch (error) {
+        console.error('PUT /api/group-membership/status error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.post('/api/group-membership/join', async (req, res) => {
     const { userId, groupId } = req.body;
     try {
