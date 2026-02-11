@@ -1012,6 +1012,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                   <div><label className="block text-sm font-medium mb-2">Group Name</label><input type="text" value={group.name} onChange={(e) => setGroup({...group, name: e.target.value})} className="w-full p-3 border rounded-lg bg-gray-50 dark:bg-gray-700" /></div>
                   <div className="grid grid-cols-2 gap-6"><div><label className="block text-sm font-medium mb-2">Contribution Amount</label><input type="number" value={group.contributionAmount} onChange={(e) => setGroup({...group, contributionAmount: Number(e.target.value)})} className="w-full p-3 border rounded-lg bg-gray-50 dark:bg-gray-700" /></div><div><label className="block text-sm font-medium mb-2">Currency</label><select value={group.currency} onChange={(e) => setGroup({...group, currency: e.target.value})} className="w-full p-3 border rounded-lg bg-gray-50 dark:bg-gray-700"><option value="GHS">GHS</option><option value="USD">USD</option></select></div></div>
                   
+                  <div>
+                      <label className="block text-sm font-medium mb-2">Scheduled Payout Amount (Estimated)</label>
+                      <input 
+                        type="text" 
+                        value={`${group.currency} ${(group.contributionAmount * activeMembers.length).toLocaleString()}`} 
+                        readOnly 
+                        className="w-full p-3 border rounded-lg bg-gray-100 dark:bg-gray-600 text-gray-500 cursor-not-allowed" 
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Calculated: Contribution x {activeMembers.length} Active Members</p>
+                  </div>
+
                   {/* Frequency Setting */}
                   <div>
                       <label className="block text-sm font-medium mb-2">Frequency</label>
