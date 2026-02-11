@@ -85,7 +85,8 @@ class DatabaseService {
       reminderDaysBefore: 3,
       status: g.status || 'ACTIVE',
       cycleStartDate: g.cycle_start_date ? new Date(g.cycle_start_date).toISOString() : undefined,
-      cycleEndDate: g.cycle_end_date ? new Date(g.cycle_end_date).toISOString() : undefined
+      cycleEndDate: g.cycle_end_date ? new Date(g.cycle_end_date).toISOString() : undefined,
+      scheduledPayoutAmount: Number(g.scheduled_payout_amount || 0)
     };
   }
 
@@ -268,7 +269,8 @@ class DatabaseService {
       welcomeMessage: data.welcomeMessage || '',
       icon: data.icon || '',
       creatorId: data.creatorId,
-      status: 'PENDING_VERIFICATION'
+      status: 'PENDING_VERIFICATION',
+      scheduledPayoutAmount: data.scheduledPayoutAmount || 0
     };
 
     if (this.isServerOnline) {
@@ -308,7 +310,8 @@ class DatabaseService {
                     frequency: data.frequency,
                     welcomeMessage: data.welcomeMessage,
                     icon: data.icon,
-                    payoutSchedule: data.payoutSchedule
+                    payoutSchedule: data.payoutSchedule,
+                    scheduledPayoutAmount: data.scheduledPayoutAmount
                 })
             });
             if (res.ok) {

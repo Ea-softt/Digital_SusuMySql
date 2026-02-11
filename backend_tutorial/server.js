@@ -95,6 +95,11 @@ async function initializeDatabase() {
             await connection.query(`ALTER TABLE savings_groups ADD COLUMN cycle_start_date DATETIME, ADD COLUMN cycle_end_date DATETIME`);
         }
 
+        const [spaCols] = await connection.query(`SHOW COLUMNS FROM savings_groups LIKE 'scheduled_payout_amount'`);
+        if (spaCols.length === 0) {
+            await connection.query(`ALTER TABLE savings_groups ADD COLUMN scheduled_payout_amount DECIMAL(15, 2) DEFAULT 0.00`);
+        }
+
         await connection.query(`
             CREATE TABLE IF NOT EXISTS group_memberships (
                 user_id VARCHAR(50),
@@ -189,13 +194,13 @@ app.get('/api/groups', async (req, res) => {
 });
 
 app.post('/api/groups', async (req, res) => {
-    const { id, name, contributionAmount, currency, frequency, inviteCode, welcomeMessage, icon, creatorId } = req.body;
+    const { id, name, contributionAmount, currency, frequency, inviteCode, welcomeMessage, icon, creatorId, scheduledPayoutAmount } = req.body;
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
         await connection.query(
-            `INSERT INTO savings_groups (id, name, contribution_amount, currency, frequency, invite_code, welcome_message, icon) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [id, name, contributionAmount, currency, frequency, inviteCode, welcomeMessage, icon]
+            `INSERT INTO savings_groups (id, name, contribution_amount, currency, frequency, invite_code, welcome_message, icon, scheduled_payout_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [id, name, contributionAmount, currency, frequency, inviteCode, welcomeMessage, icon, scheduledPayoutAmount || 0]
         );
         if (creatorId) {
             await connection.query(`INSERT INTO group_memberships (user_id, group_id, role, status) VALUES (?, ?, 'ADMIN', 'ACTIVE')`, [creatorId, id]);
@@ -213,7 +218,7 @@ app.post('/api/groups', async (req, res) => {
 });
 
 app.put('/api/groups/:id', async (req, res) => {
-    const { name, contributionAmount, currency, frequency, welcomeMessage, icon, payoutSchedule } = req.body;
+    const { name, contributionAmount, currency, frequency, welcomeMessage, icon, payoutSchedule, scheduledPayoutAmount } = req.body;
     const updates = [];
     const values = [];
 
@@ -224,6 +229,7 @@ app.put('/api/groups/:id', async (req, res) => {
     if (welcomeMessage) { updates.push('welcome_message = ?'); values.push(welcomeMessage); }
     if (icon) { updates.push('icon = ?'); values.push(icon); }
     if (payoutSchedule) { updates.push('payout_schedule = ?'); values.push(JSON.stringify(payoutSchedule)); }
+    if (scheduledPayoutAmount !== undefined) { updates.push('scheduled_payout_amount = ?'); values.push(scheduledPayoutAmount); }
 
     if (updates.length === 0) return res.json({ success: true, message: 'No changes provided.' });
 

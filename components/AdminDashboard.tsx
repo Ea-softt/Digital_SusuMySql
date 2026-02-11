@@ -1013,14 +1013,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                   <div className="grid grid-cols-2 gap-6"><div><label className="block text-sm font-medium mb-2">Contribution Amount</label><input type="number" value={group.contributionAmount} onChange={(e) => setGroup({...group, contributionAmount: Number(e.target.value)})} className="w-full p-3 border rounded-lg bg-gray-50 dark:bg-gray-700" /></div><div><label className="block text-sm font-medium mb-2">Currency</label><select value={group.currency} onChange={(e) => setGroup({...group, currency: e.target.value})} className="w-full p-3 border rounded-lg bg-gray-50 dark:bg-gray-700"><option value="GHS">GHS</option><option value="USD">USD</option></select></div></div>
                   
                   <div>
-                      <label className="block text-sm font-medium mb-2">Scheduled Payout Amount (Estimated)</label>
+                      <label className="block text-sm font-medium mb-2">Scheduled Payout Amount</label>
                       <input 
-                        type="text" 
-                        value={`${group.currency} ${(group.contributionAmount * activeMembers.length).toLocaleString()}`} 
-                        readOnly 
-                        className="w-full p-3 border rounded-lg bg-gray-100 dark:bg-gray-600 text-gray-500 cursor-not-allowed" 
+                        type="number" 
+                        value={group.scheduledPayoutAmount || ''} 
+                        onChange={(e) => setGroup({...group, scheduledPayoutAmount: Number(e.target.value)})} 
+                        className="w-full p-3 border rounded-lg bg-gray-50 dark:bg-gray-700" 
+                        placeholder="0.00"
                       />
-                      <p className="text-xs text-gray-500 mt-1">Calculated: Contribution x {activeMembers.length} Active Members</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Estimated based on contributions: {moneyFormatter(group.contributionAmount * activeMembers.length, group.currency)}
+                      </p>
                   </div>
 
                   {/* Frequency Setting */}
