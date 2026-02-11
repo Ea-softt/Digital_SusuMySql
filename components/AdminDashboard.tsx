@@ -1157,6 +1157,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
       alert("Payout order updated locally. Save settings to persist.");
     };
 
+    // Contribution Logic for Current Cycle
+    const currentCycleStart = group.cycleStartDate ? new Date(group.cycleStartDate).getTime() : 0;
+    const paidContribUserIds = new Set(
+        groupContributionTransactions
+            .filter(t => new Date(t.date).getTime() >= currentCycleStart && t.status === 'COMPLETED')
+            .map(t => t.userId)
+    );
+    const membersWhoPaidContrib = activeMembersInCycle.filter(m => paidContribUserIds.has(m.id));
+    const membersWhoNotPaidContrib = activeMembersInCycle.filter(m => !paidContribUserIds.has(m.id));
+
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
             <div className="lg:col-span-2 space-y-6">
@@ -1308,6 +1318,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                                     <p className="font-medium text-gray-800 dark:text-gray-200">{member.name}</p>
                                 </div>
                             )) : <p className="text-sm text-gray-500">All members have received their payout.</p>}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                    <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-4">Cycle Contribution Status</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 className="font-bold text-sm text-green-600 dark:text-green-400 mb-3 flex items-center gap-2">
+                                <CheckCircle className="w-4 h-4" /> Paid ({membersWhoPaidContrib.length})
+                            </h4>
+                            <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+                                {membersWhoPaidContrib.length > 0 ? membersWhoPaidContrib.map(member => (
+                                    <div key={member.id} className="flex items-center gap-3 p-2 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-100 dark:border-green-800">
+                                        <img src={member.avatar} alt="" className="w-8 h-8 rounded-full" />
+                                        <p className="font-medium text-gray-800 dark:text-gray-200 text-sm">{member.name}</p>
+                                    </div>
+                                )) : <p className="text-sm text-gray-500 italic">No contributions yet for this cycle.</p>}
+                            </div>
+                        </div>
+                        <div>
+                            <h4 className="font-bold text-sm text-red-600 dark:text-red-400 mb-3 flex items-center gap-2">
+                                <AlertTriangle className="w-4 h-4" /> Pending ({membersWhoNotPaidContrib.length})
+                            </h4>
+                            <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+                                {membersWhoNotPaidContrib.length > 0 ? membersWhoNotPaidContrib.map(member => (
+                                    <div key={member.id} className="flex items-center gap-3 p-2 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-100 dark:border-red-800">
+                                        <img src={member.avatar} alt="" className="w-8 h-8 rounded-full" />
+                                        <p className="font-medium text-gray-800 dark:text-gray-200 text-sm">{member.name}</p>
+                                    </div>
+                                )) : <p className="text-sm text-gray-500 italic">All members have contributed.</p>}
+                            </div>
                         </div>
                     </div>
                 </div>
