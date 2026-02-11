@@ -456,7 +456,7 @@ app.post('/api/groups/join', async (req, res) => {
             }
         } else {
             await connection.query(
-                'INSERT INTO group_memberships (user_id, group_id, role, status) VALUES (?, ?, \'MEMBER\', \'ACTIVE\')',
+                'INSERT INTO group_memberships (user_id, group_id, role, status) VALUES (?, ?, \'MEMBER\', \'PENDING\')',
                 [userId, groupId]
             );
         }
@@ -542,7 +542,7 @@ app.post('/api/group-membership/join', async (req, res) => {
             // Create new membership
             await pool.query(
                 'INSERT INTO group_memberships (user_id, group_id, role, status, is_blocked, is_deleted) VALUES (?, ?, ?, ?, ?, ?)',
-                [userId, groupId, 'MEMBER', 'ACTIVE', 0, 0]
+                [userId, groupId, 'MEMBER', 'PENDING', 0, 0]
             );
         }
         res.json({ success: true });
