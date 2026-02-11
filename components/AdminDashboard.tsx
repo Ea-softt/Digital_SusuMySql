@@ -1199,37 +1199,87 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                     )}
                 </div>
 
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-                    <div className="flex justify-between items-center mb-4">
-                      <h3 className="font-bold text-lg text-gray-900 dark:text-white">Payout Queue</h3>
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => handleReorder([...payoutOrder].sort(() => Math.random() - 0.5))} className="p-2 text-gray-500 hover:text-primary-600 rounded-full bg-gray-100 dark:bg-gray-700"><Shuffle className="w-4 h-4" /></button>
-                        <span className="text-xs text-gray-400">Randomize</span>
-                      </div>
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                    <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-800">
+                        <h3 className="font-bold text-lg text-gray-900 dark:text-white">Payout Cycle Status</h3>
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => handleReorder([...payoutOrder].sort(() => Math.random() - 0.5))} className="p-2 text-gray-500 hover:text-primary-600 rounded-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 shadow-sm transition-colors" title="Randomize Order">
+                                <Shuffle className="w-4 h-4" />
+                            </button>
+                        </div>
                     </div>
-                    
-                    <ul className="space-y-3">
-                        {validPayoutOrder.map((userId, index) => {
-                            const member = members.find(m => m.id === userId);
-                            if (!member) return null;
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                                <tr>
+                                    <th className="px-6 py-3 font-medium">Queue</th>
+                                    <th className="px-6 py-3 font-medium">Member</th>
+                                    <th className="px-6 py-3 font-medium">Status</th>
+                                    <th className="px-6 py-3 font-medium text-right">Paid Amount</th>
+                                    <th className="px-6 py-3 font-medium text-right">Date</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                {validPayoutOrder.map((userId, index) => {
+                                    const member = members.find(m => m.id === userId);
+                                    if (!member) return null;
+                                    const isPaid = paidUserIds.has(userId);
+                                    const payoutTx = currentCyclePayoutHistory.find(t => t.userId === userId);
+                                    const isNext = index === nextUserIndex;
 
-                            const isPaid = paidUserIds.has(userId);
-                            const isNext = index === nextUserIndex;
-
-                            return (
-                                <li key={userId} className={`flex items-center justify-between p-3 rounded-lg transition-all ${isNext ? 'bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700' : isPaid ? 'bg-gray-100 dark:bg-gray-700/50 opacity-60' : 'bg-gray-50 dark:bg-gray-800'}`}>
-                                    <div className="flex items-center gap-3">
-                                        <span className={`font-bold text-sm w-6 text-center ${isNext ? 'text-blue-600 dark:text-blue-300' : 'text-gray-400'}`}>{index + 1}</span>
-                                        <img src={member.avatar} alt={member.name} className="w-8 h-8 rounded-full" />
-                                        <p className="font-medium text-gray-800 dark:text-gray-200">{member.name}</p>
-                                    </div>
-                                    <div>
-                                        {isPaid ? <span className="px-2 py-1 text-xs font-bold text-green-800 dark:text-green-300 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center gap-1"><CheckCircle className="w-3 h-3"/> Paid</span> : isNext ? <span className="px-2 py-1 text-xs font-bold text-blue-800 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/30 rounded-full animate-pulse">Next Up</span> : <span className="px-2 py-1 text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded-full">Pending</span>}
-                                    </div>
-                                </li>
-                            );
-                        })}
-                    </ul>
+                                    return (
+                                        <tr key={userId} className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${isNext ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
+                                            <td className="px-6 py-4">
+                                                <span className={`font-mono font-bold ${isNext ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                                                    #{index + 1}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <img src={member.avatar} alt="" className="w-8 h-8 rounded-full" />
+                                                    <p className={`font-medium ${isNext ? 'text-blue-900 dark:text-blue-100' : 'text-gray-900 dark:text-white'}`}>{member.name}</p>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {isPaid ? (
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
+                                                        <CheckCircle className="w-3 h-3" /> Paid
+                                                    </span>
+                                                ) : isNext ? (
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 animate-pulse">
+                                                        <Clock className="w-3 h-3" /> Next Up
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
+                                                        Pending
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4 text-right font-medium text-gray-900 dark:text-white">
+                                                {isPaid && payoutTx 
+                                                    ? moneyFormatter(payoutTx.amount, group.currency)
+                                                    : <span className="text-gray-400">-</span>
+                                                }
+                                            </td>
+                                            <td className="px-6 py-4 text-right text-gray-500 dark:text-gray-400">
+                                                {isPaid && payoutTx 
+                                                    ? new Date(payoutTx.date).toLocaleDateString()
+                                                    : <span className="text-gray-400">-</span>
+                                                }
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                                {validPayoutOrder.length === 0 && (
+                                    <tr>
+                                        <td colSpan={5} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                                            No members in payout schedule.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
