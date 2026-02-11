@@ -69,6 +69,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
   // This enforces the exclusion at the data level for this view.
   const visibleMembers = useMemo(() => {
     return members.filter(m => m.role !== UserRole.SUPERUSER && memberIdSet.has(m.id));
+    return members.filter(m => m.role !== UserRole.SUPERUSER && memberIdSet.has(m.id) && m.status !== 'SUSPENDED');
   }, [members, memberIdSet]);
 
   // Filter the payout schedule to only include visible members
@@ -587,6 +588,23 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                          <History className="w-4 h-4" /> Check Again
                       </button>
                   </div>
+              </div>
+          </div>
+      );
+  }
+
+  if (currentUser.status === 'SUSPENDED') {
+      return (
+          <div className="max-w-md mx-auto mt-10 text-center animate-fade-in">
+              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-red-100 dark:border-red-900 p-8">
+                  <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <ShieldAlert className="w-10 h-10 text-red-600 dark:text-red-400" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Account Suspended</h2>
+                  <p className="text-gray-500 dark:text-gray-400 mb-6">
+                      Your account has been suspended by the system administrator. 
+                      Please contact support for assistance.
+                  </p>
               </div>
           </div>
       );
