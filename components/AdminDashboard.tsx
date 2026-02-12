@@ -483,22 +483,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
           setWalletModalOpen(true);
           return;
       }
-      try {
-          const newTx: Transaction = {
-              id: `t${Date.now()}`,
-              userId: currentUser.id,
-              userName: currentUser.name,
-              type: 'CONTRIBUTION',
-              amount: group.contributionAmount,
-              date: new Date().toISOString().split('T')[0],
-              status: 'COMPLETED'
-          };
-          await db.addTransaction(newTx, group.id);
-          if (onRefresh) onRefresh();
-          alert("Admin contribution recorded successfully.");
-      } catch (err) {
-          alert("Action failed.");
-      }
+      setConfirmDialog({
+          isOpen: true,
+          title: 'Confirm Contribution',
+          message: `Are you sure you want to pay your share of ${moneyFormatter(group.contributionAmount, group.currency)}?`,
+          type: 'primary',
+          onConfirm: async () => {
+              try {
+                  const newTx: Transaction = {
+                      id: `t${Date.now()}`,
+                      userId: currentUser.id,
+                      userName: currentUser.name,
+                      type: 'CONTRIBUTION',
+                      amount: group.contributionAmount,
+                      date: new Date().toISOString().split('T')[0],
+                      status: 'COMPLETED'
+                  };
+                  await db.addTransaction(newTx, group.id);
+                  if (onRefresh) onRefresh();
+                  alert("Admin contribution recorded successfully.");
+              } catch (err) {
+                  alert("Action failed.");
+              }
+              setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+          }
+      });
   };
 
   const handleToggleMemberForPayout = (memberId: string) => {
