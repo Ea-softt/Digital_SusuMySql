@@ -186,6 +186,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
               groupId: group.id,
           };
           await db.addTransaction(newTx, group.id);
+          await db.sendGroupMessage(currentUser, `💰 I just contributed ${moneyFormatter(group.contributionAmount, currency)}!`, group.id);
           if (onRefresh) onRefresh();
           setContributionConfirmOpen(false);
           alert(`Successfully contributed ${currency} ${group.contributionAmount}!`);
@@ -1085,6 +1086,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
 
   const handleLeaveGroup = async () => {
       if (window.confirm("Are you sure you want to leave this group? You can join again later using the invite code.")) {
+          await db.sendGroupMessage(currentUser, `👋 I have left the group.`, group.id);
           const success = await db.leaveGroup(group.id, userId);
           if (success) {
               alert("You have successfully left the group.");

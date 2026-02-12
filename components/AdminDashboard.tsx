@@ -229,6 +229,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
         const success = await db.updateGroupMembershipStatus(group.id, id, 'ACTIVE');
         if (!success) throw new Error("Failed to approve member.");
 
+        const member = members.find(m => m.id === id);
+        if (member) {
+            await db.sendGroupMessage(currentUser, `👋 Welcome ${member.name} to the group!`, group.id);
+        }
+
         if (onRefresh) onRefresh();
         setConfirmDialog(prev => ({ ...prev, isOpen: false }));
     } catch (err) {
@@ -238,8 +243,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
 
   const handleRejectMember = async (id: string) => {
     try {
+        const member = members.find(m => m.id === id);
         const success = await db.removeMemberFromGroup(group.id, id);
         if (!success) throw new Error("Failed to reject member.");
+
+        if (member) {
+             await db.sendGroupMessage(currentUser, `🚫 Membership request for ${member.name} was rejected.`, group.id);
+        }
 
         if (onRefresh) onRefresh();
         setConfirmDialog(prev => ({ ...prev, isOpen: false }));
@@ -257,6 +267,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
         // Since the current db service simulates this with addTransaction/syncData,
         // we update via updateUser logic or similar if needed, or re-add as completed.
         // For this hybrid, we assume re-sync handles it after the leader clicks.
+        await db.sendGroupMessage(currentUser, `✅ Contribution of ${moneyFormatter(tx.amount, group.currency)} from ${tx.userName} confirmed.`, group.id);
         alert("Verification confirmed! Updating central ledger...");
         if (onRefresh) onRefresh();
         setConfirmDialog(prev => ({ ...prev, isOpen: false }));
@@ -271,6 +282,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
 
     try {
         // Mock rejection as we don't have a specific backend endpoint for this.
+        await db.sendGroupMessage(currentUser, `❌ Contribution from ${tx.userName} was rejected.`, group.id);
         alert("Transaction rejected and member notified.");
         if (onRefresh) onRefresh(); // Re-sync data from the server.
         setConfirmDialog(prev => ({ ...prev, isOpen: false }));
@@ -302,6 +314,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
 
   const handleRemoveMemberFromGroup = async (userId: string) => {
     try {
+        const member = members.find(m => m.id === userId);
         await db.removeMemberFromGroup(group.id, userId);
         
         // Update local state immediately
@@ -310,6 +323,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
             delete next[userId];
             return next;
         });
+
+        if (member) {
+            await db.sendGroupMessage(currentUser, `🚫 ${member.name} has been removed from the group.`, group.id);
+        }
         
         if (onRefresh) onRefresh();
         setConfirmDialog(prev => ({ ...prev, isOpen: false }));
@@ -344,6 +361,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
           cycleEndDate: cycleEndDate
       }));
 
+      await db.sendGroupMessage(currentUser, `🔄 A new payout cycle has started!`, group.id);
       if (onRefresh) onRefresh();
       alert("New payout cycle started successfully");
     } catch (error) {
@@ -500,6 +518,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                       status: 'COMPLETED'
                   };
                   await db.addTransaction(newTx, group.id);
+                  await db.sendGroupMessage(currentUser, `💰 I just contributed ${moneyFormatter(group.contributionAmount, group.currency)}!`, group.id);
                   if (onRefresh) onRefresh();
                   alert("Admin contribution recorded successfully.");
               } catch (err) {
@@ -929,6 +948,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
 
     return (
       <div className="space-y-6 animate-fade-in">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Card 1: Member Contributions */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-100 dark:border-gray-700 shadow-sm">
+                <div className="flex items-center gap-3 mb-2">
+                    <Users className="w-6 h-6 text-blue-500" />
+                    <h4 className="text-lg font-bold text-gray-800 dark:text-white">Member Contributions</h4>
+                </div>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{moneyFormatter(group.totalPool, group.currency)}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Total funds collected from members for the current cycle.</p>
+                <div className="mt-4">
+                     <button 
+                         onClick={() => setIsSplitPayoutModalOpen(true)}
+                         disabled={group.totalPool <= 0 || isPayoutCycleComplete}
+                         className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                     >
+                        <Shuffle className="w-4 h-4" /> Distribute Payout
+                    </button>
+                </div>
+            </div>
+
+            {/* Card 2: Group Leader Wallet */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-100 dark:border-gray-700 shadow-sm">
+                <div className="flex items-center gap-3 mb-2">
+                    <Wallet className="w-6 h-6 text-green-500" />
+                    <h4 className="text-lg font-bold text-gray-800 dark:text-white">Group Leader Wallet</h4>
+                </div>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{moneyFormatter(walletBalance, group.currency)}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Your personal funds to manage group payments.</p>
+                <div className="mt-4 flex flex-col sm:flex-row gap-3">
+                     <button onClick={() => setWalletModalOpen(true)} className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg font-bold flex items-center justify-center gap-2"><Smartphone className="w-4 h-4" /> Load Wallet</button>
+                     <button onClick={() => setWithdrawModalOpen(true)} className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg font-bold flex items-center justify-center gap-2"><ArrowUpRight className="w-4 h-4" /> Withdraw</button>
+                     <button onClick={handleAdminContribution} className="flex-1 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-bold flex items-center justify-center gap-2"><DollarSign className="w-4 h-4" /> Pay My Share</button>
+                </div>
+            </div>
+        </div>
           {/* Member Contribution Transactions */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex flex-col md:flex-row justify-between items-center gap-4">
@@ -1241,6 +1295,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                 try {
                     const res = await fetch(`/api/transactions/${tx.id}/rollback`, { method: 'PUT' });
                     if (res.ok) {
+                        await db.sendGroupMessage(currentUser, `⚠️ Contribution for ${tx.userName} has been rolled back.`, group.id);
                         alert("Member contribution has been rolled back.");
                         if (onRefresh) onRefresh();
                     } else {
@@ -1279,6 +1334,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                     });
                     
                     if (res.ok) {
+                        await db.sendGroupMessage(currentUser, `⚠️ All contributions for this cycle have been rolled back.`, group.id);
                         alert("All paid member contributions have been rolled back for this cycle.");
                         if (onRefresh) onRefresh();
                     } else {
@@ -1559,8 +1615,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
       type: 'danger',
       onConfirm: async () => {
         try {
+            const member = members.find(m => m.id === id);
             const success = await db.updateGroupMembershipStatus(group.id, id, 'SUSPENDED');
             if (success) {
+                if (member) {
+                    await db.sendGroupMessage(currentUser, `⛔ ${member.name} has been suspended from the group.`, group.id);
+                }
                 if (onRefresh) onRefresh();
                 setViewMember(null);
                 setConfirmDialog(prev => ({ ...prev, isOpen: false }));
