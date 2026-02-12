@@ -562,13 +562,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
           onConfirm: async () => {
               setIsProcessingSplitPayout(true);
               try {
-                  // Select a random verifier from active members (excluding superusers)
-                  const activeGroupMembers = members.filter(m => 
+                  // Select a random verifier from active members (excluding superusers and admin)
+                  const potentialVerifiers = members.filter(m => 
                       m.role !== UserRole.SUPERUSER && 
+                      m.id !== currentUser.id && // Exclude Admin/Current User
                       groupMemberships[m.id] === 'ACTIVE' && 
                       m.status !== 'SUSPENDED'
                   );
-                  const verifier = activeGroupMembers.length > 0 ? activeGroupMembers[Math.floor(Math.random() * activeGroupMembers.length)] : null;
+
+                  // Filter out recipients to ensure independent verification
+                  const independentVerifiers = potentialVerifiers.filter(m => !selectedMembersForPayout.includes(m.id));
+                  
+                  const verifier = independentVerifiers.length > 0 ? independentVerifiers[Math.floor(Math.random() * independentVerifiers.length)] : null;
+                  const txStatus = verifier ? 'PENDING' : 'COMPLETED';
 
                   const payoutTransactions: Transaction[] = selectedMembersForPayout.map(memberId => {
                       const member = members.find(m => m.id === memberId);
@@ -583,7 +589,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                           type: 'PAYOUT',
                           amount: amount,
                           date: new Date().toISOString().split('T')[0],
-                          status: 'PENDING', // Set to PENDING for verification
+                          status: txStatus,
                           verifierId: verifier?.id
                       };
                   }).filter((tx): tx is Transaction => tx !== null);
@@ -597,6 +603,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                   }
 
                   // Note: Pool is NOT updated here. It updates when status becomes COMPLETED via verification.
+                  // Note: Pool is updated by backend if status is COMPLETED. If PENDING, it updates upon verification.
 
                   let successMessage = `Payouts initiated! ${moneyFormatter(Number(totalPayoutAmount), group.currency)} allocated to ${payoutTransactions.length} members.`;
 
@@ -607,6 +614,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                           group.id
                       );
                       successMessage += `\n\nVerification Required: ${verifier.name} must verify these transactions before funds are released.`;
+                  } else {
+                      successMessage += `\n\nPayout completed immediately (No independent verifier available).`;
                   }
 
                   alert(successMessage);
@@ -1152,6 +1161,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
             onConfirm: async () => {
                 setIsProcessingPayout(true);
                 try {
+                    // Select a random verifier from active members (excluding superusers, admin, and recipient)
+                    const potentialVerifiers = members.filter(m => 
+                        m.role !== UserRole.SUPERUSER && 
+                        m.id !== currentUser.id && // Exclude Admin/Current User
+                        groupMemberships[m.id] === 'ACTIVE' && 
+                        m.status !== 'SUSPENDED' &&
+                        m.id !== nextRecipient.id // Exclude recipient
+                    );
+
+                    const verifier = potentialVerifiers.length > 0 ? potentialVerifiers[Math.floor(Math.random() * potentialVerifiers.length)] : null;
+                    const txStatus = verifier ? 'PENDING' : 'COMPLETED';
+
                     await new Promise(res => setTimeout(res, 1500)); 
 
                     const newTx: Transaction = {
@@ -1161,14 +1182,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                         type: 'PAYOUT',
                         amount: payoutAmount,
                         date: new Date().toISOString().split('T')[0],
-                        status: 'COMPLETED'
+                        status: txStatus,
+                        verifierId: verifier?.id
                     };
 
                     await db.addTransaction(newTx, group.id);
                     
                     await db.updateGroup(group.id, { ...group, totalPool: group.totalPool - payoutAmount });
+                    let successMessage = `Payout initiated! ${moneyFormatter(payoutAmount, group.currency)} sent to ${nextRecipient.name}.`;
 
                     alert(`Payout successful! ${nextRecipient.name} has been paid.`);
+                    if (verifier) {
+                        await db.sendGroupMessage(
+                            currentUser, 
+                            `🔍 VERIFICATION REQUIRED: ${verifier.name} has been selected to verify the pending payout to ${nextRecipient.name}. Please check your dashboard to approve.`,
+                            group.id
+                        );
+                        successMessage += `\n\nVerification Required: ${verifier.name} must verify this transaction before funds are released.`;
+                    } else {
+                        successMessage += `\n\nPayout completed immediately (No independent verifier available).`;
+                    }
+
+                    alert(successMessage);
                     if (onRefresh) onRefresh();
 
                 } catch (err) {
