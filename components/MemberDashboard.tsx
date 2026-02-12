@@ -337,7 +337,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                 }
             </div>
         </div>
-        
+{/*         
         <div className="bg-gradient-to-br from-purple-900 to-indigo-900 rounded-xl p-6 text-white shadow-lg">
             <p className="text-purple-200 text-sm font-medium mb-1">Available to Withdraw</p>                
             <h2 className="text-4xl font-bold mb-4">{moneyFormatter(walletBalance, currency)}</h2>
@@ -359,7 +359,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                     <span className="font-bold text-white">{currency} {totalWithdrawals}</span>
                 </div>
             </div>
-        </div>
+        </div> */}
 
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
             <div className="overflow-x-auto">
