@@ -114,6 +114,7 @@ export interface Transaction {
   amount: number;
   date: string; // ISO String YYYY-MM-DD
   status: 'COMPLETED' | 'PENDING' | 'FAILED';
+  is_rolled_back?: boolean;
 }
 
 // AI Chat Messages

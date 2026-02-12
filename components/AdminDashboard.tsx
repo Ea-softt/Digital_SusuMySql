@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User, Transaction, Group, UserRole, AuditLog } from '../types';
 import { StatsCard } from './StatsCard';
-import { Users, Shield, Activity, DollarSign, Search, AlertTriangle, CheckCircle, XCircle, Lock, Unlock, Trash2, Server, Database, Settings, ScanFace, BrainCircuit, X, TrendingUp, Download, Upload, AlertOctagon, Globe, PlusCircle, Calendar, Camera, MessageSquare, UserCog, ShieldAlert, ChevronRight, Wallet, ArrowUpRight, FileText, UserPlus, Mail, Loader2, Eye, MapPin, Smartphone, Cpu, Wifi, Phone, History, FileDown, Radar, ArrowLeft, Megaphone, Send, Clock, ShieldCheck, BarChart3, Shuffle, ListOrdered, Check, ArrowUp, ArrowDown, Briefcase, Calendar as CalendarIcon, CreditCard, Zap, PlayCircle, Save, Bell, Percent, User as UserIcon, Copy } from 'lucide-react';
+import { Users, Shield, Activity, DollarSign, Search, AlertTriangle, CheckCircle, XCircle, Lock, Unlock, Trash2, Server, Database, Settings, ScanFace, BrainCircuit, X, TrendingUp, Download, Upload, AlertOctagon, Globe, PlusCircle, Calendar, Camera, MessageSquare, UserCog, ShieldAlert, ChevronRight, Wallet, ArrowUpRight, FileText, UserPlus, Mail, Loader2, Eye, MapPin, Smartphone, Cpu, Wifi, Phone, History, FileDown, Radar, ArrowLeft, Megaphone, Send, Clock, ShieldCheck, BarChart3, Shuffle, ListOrdered, Check, ArrowUp, ArrowDown, Briefcase, Calendar as CalendarIcon, CreditCard, Zap, PlayCircle, Save, Bell, Percent, User as UserIcon, Copy, RotateCcw } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid, Legend, PieChart, Pie, Cell } from 'recharts';
 import { db } from '../services/database';
 import { GroupChat } from './GroupChat';
@@ -947,11 +947,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                               <td className="px-6 py-4 text-right">
                                 {tx.status === 'PENDING' ? (
                                     <div className="flex justify-end gap-2">
-                                        <button onClick={() => { setConfirmDialog({ isOpen: true, title: 'Approve Transaction', message: `Approve this ${moneyFormatter(tx.amount, group.currency)} contribution from ${tx.userName}?`, type: 'primary', onConfirm: () => handleApproveTransaction(tx.id) }); }} className="p-1 bg-green-100 text-green-700 rounded"><Check className="w-4 h-4" /></button>
-                                        <button onClick={() => { setConfirmDialog({ isOpen: true, title: 'Reject Transaction', message: `Reject this contribution from ${tx.userName}?`, type: 'danger', onConfirm: () => handleRejectTransaction(tx.id) }); }} className="p-1 bg-red-100 text-red-700 rounded"><X className="w-4 h-4" /></button>
+                                        <button onClick={() => { setConfirmDialog({ isOpen: true, title: 'Approve Transaction', message: `Approve this ${moneyFormatter(tx.amount, group.currency)} contribution from ${tx.userName}?`, type: 'primary', onConfirm: () => handleApproveTransaction(tx.id) }); }} className="p-1 bg-green-100 text-green-700 rounded" title="Approve"><Check className="w-4 h-4" /></button>
+                                        <button onClick={() => { setConfirmDialog({ isOpen: true, title: 'Reject Transaction', message: `Reject this contribution from ${tx.userName}?`, type: 'danger', onConfirm: () => handleRejectTransaction(tx.id) }); }} className="p-1 bg-red-100 text-red-700 rounded" title="Reject"><X className="w-4 h-4" /></button>
                                     </div>
                                 ) : (
-                                    <span className="text-xs text-gray-400 italic">No actions</span>
+                                    tx.is_rolled_back ? 
+                                    <span className="text-xs font-bold text-gray-500 dark:text-gray-400">Rolled Back</span> :
+                                    <span className="text-xs text-gray-400 italic">Completed</span>
                                 )}
                               </td>
                           </tr>
@@ -1157,11 +1159,82 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
       alert("Payout order updated locally. Save settings to persist.");
     };
 
+    const handleRollbackContribution = async (memberId: string) => {
+        const currentCycleStart = group.cycleStartDate ? new Date(group.cycleStartDate).getTime() : 0;
+        // Find the latest completed contribution for this member in this cycle
+        const memberContribs = groupContributionTransactions
+            .filter(t => t.userId === memberId && new Date(t.date).getTime() >= currentCycleStart && t.status === 'COMPLETED')
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        if (memberContribs.length === 0) return;
+        const tx = memberContribs[0];
+
+        setConfirmDialog({
+            isOpen: true,
+            title: 'Rollback Contribution',
+            message: `Are you sure you want to rollback the Member,${tx.userName}?.`,
+            type: 'warning',
+            onConfirm: async () => {
+                try {
+                    const res = await fetch(`/api/transactions/${tx.id}/rollback`, { method: 'PUT' });
+                    if (res.ok) {
+                        alert("Member contribution has been rolled back.");
+                        if (onRefresh) onRefresh();
+                    } else {
+                        alert("Failed to rollback contribution.");
+                    }
+                } catch (e) {
+                    console.error(e);
+                    alert("Error connecting to server.");
+                }
+                setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+            }
+        });
+    };
+
+    const handleRollbackAllContributions = async () => {
+        const currentCycleStart = group.cycleStartDate ? new Date(group.cycleStartDate).getTime() : 0;
+        
+        // Find all completed contributions for the current cycle
+        const txsToRollback = groupContributionTransactions
+            .filter(t => new Date(t.date).getTime() >= currentCycleStart && t.status === 'COMPLETED')
+            .map(t => t.id);
+
+        if (txsToRollback.length === 0) return;
+
+        setConfirmDialog({
+            isOpen: true,
+            title: 'Rollback All Contributions',
+            message: `Are you sure you want to reset the status for ALL ${txsToRollback.length} paid members in this cycle? This will mark them as Pending but NOT refund the pool.`,
+            type: 'danger',
+            onConfirm: async () => {
+                try {
+                    const res = await fetch(`/api/transactions/bulk-rollback`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ transactionIds: txsToRollback })
+                    });
+                    
+                    if (res.ok) {
+                        alert("All paid member contributions have been rolled back for this cycle.");
+                        if (onRefresh) onRefresh();
+                    } else {
+                        alert("Failed to rollback transactions.");
+                    }
+                } catch (e) {
+                    console.error(e);
+                    alert("Error connecting to server.");
+                }
+                setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+            }
+        });
+    };
+
     // Contribution Logic for Current Cycle
     const currentCycleStart = group.cycleStartDate ? new Date(group.cycleStartDate).getTime() : 0;
     const paidContribUserIds = new Set(
         groupContributionTransactions
-            .filter(t => new Date(t.date).getTime() >= currentCycleStart && t.status === 'COMPLETED')
+            .filter(t => new Date(t.date).getTime() >= currentCycleStart && t.status === 'COMPLETED' && !t.is_rolled_back)
             .map(t => t.userId)
     );
     const membersWhoPaidContrib = activeMembersInCycle.filter(m => paidContribUserIds.has(m.id));
@@ -1323,7 +1396,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                 </div>
 
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-                    <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-4">Cycle Contribution Status</h3>
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-bold text-lg text-gray-900 dark:text-white">Cycle Contribution Status</h3>
+                        {membersWhoPaidContrib.length > 0 && (
+                            <button 
+                                onClick={handleRollbackAllContributions}
+                                className="text-xs font-bold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                            >
+                                <RotateCcw className="w-3 h-3" /> Rollback All
+                            </button>
+                        )}
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
                             <h4 className="font-bold text-sm text-green-600 dark:text-green-400 mb-3 flex items-center gap-2">
@@ -1331,9 +1414,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                             </h4>
                             <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
                                 {membersWhoPaidContrib.length > 0 ? membersWhoPaidContrib.map(member => (
-                                    <div key={member.id} className="flex items-center gap-3 p-2 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-100 dark:border-green-800">
-                                        <img src={member.avatar} alt="" className="w-8 h-8 rounded-full" />
-                                        <p className="font-medium text-gray-800 dark:text-gray-200 text-sm">{member.name}</p>
+                                    <div key={member.id} className="flex items-center justify-between p-2 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-100 dark:border-green-800">
+                                        <div className="flex items-center gap-3">
+                                            <img src={member.avatar} alt="" className="w-8 h-8 rounded-full" />
+                                            <p className="font-medium text-gray-800 dark:text-gray-200 text-sm">{member.name}</p>
+                                        </div>
+                                        <button 
+                                            onClick={() => handleRollbackContribution(member.id)}
+                                            className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-full transition-colors"
+                                            title="Rollback Contribution"
+                                        >
+                                            <RotateCcw className="w-4 h-4" />
+                                        </button>
                                     </div>
                                 )) : <p className="text-sm text-gray-500 italic">No contributions yet for this cycle.</p>}
                             </div>
@@ -1344,9 +1436,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                             </h4>
                             <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
                                 {membersWhoNotPaidContrib.length > 0 ? membersWhoNotPaidContrib.map(member => (
-                                    <div key={member.id} className="flex items-center gap-3 p-2 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-100 dark:border-red-800">
-                                        <img src={member.avatar} alt="" className="w-8 h-8 rounded-full" />
-                                        <p className="font-medium text-gray-800 dark:text-gray-200 text-sm">{member.name}</p>
+                                    <div key={member.id} className="flex items-center justify-between p-2 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-100 dark:border-green-800">
+                                        <div className="flex items-center gap-3">
+                                            <img src={member.avatar} alt="" className="w-8 h-8 rounded-full" />
+                                            <p className="font-medium text-gray-800 dark:text-gray-200 text-sm">{member.name}</p>
+                                        </div>
+                                        <button 
+                                            onClick={() => handleRollbackContribution(member.id)}
+                                            className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-full transition-colors"
+                                            title="Rollback Status (Keep Funds)"
+                                        >
+                                            <RotateCcw className="w-4 h-4" />
+                                        </button>
                                     </div>
                                 )) : <p className="text-sm text-gray-500 italic">All members have contributed.</p>}
                             </div>

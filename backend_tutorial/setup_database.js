@@ -86,6 +86,7 @@ async function setupDatabase() {
                 amount DECIMAL(15, 2) NOT NULL,
                 status ENUM('COMPLETED', 'PENDING', 'FAILED') DEFAULT 'PENDING',
                 date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                is_rolled_back BOOLEAN DEFAULT FALSE,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             )
         `);

@@ -136,6 +136,12 @@ async function initializeDatabase() {
             )
         `);
 
+        // Add is_rolled_back to transactions table
+        const [txRolledBack] = await connection.query(`SHOW COLUMNS FROM transactions LIKE 'is_rolled_back'`);
+        if (txRolledBack.length === 0) {
+            await connection.query(`ALTER TABLE transactions ADD COLUMN is_rolled_back BOOLEAN DEFAULT 0`);
+        }
+
         await connection.query(`
             CREATE TABLE IF NOT EXISTS group_messages (
                 id VARCHAR(50) PRIMARY KEY,
@@ -340,6 +346,58 @@ app.post('/api/transactions', async (req, res) => {
             const mod = type === 'CONTRIBUTION' ? '+' : '-';
             await pool.query(`UPDATE savings_groups SET total_pool = total_pool ${mod} ? WHERE id = ?`, [amount, groupId]);
         }
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.delete('/api/transactions/:id', async (req, res) => {
+    const { id } = req.params;
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+        
+        // Get transaction details
+        const [txs] = await connection.query('SELECT * FROM transactions WHERE id = ?', [id]);
+        if (txs.length > 0) {
+            const tx = txs[0];
+            // Only refund pool for Payouts/Withdrawals. 
+            // For CONTRIBUTIONS, we do NOT deduct from pool (per request), effectively keeping the money but resetting member status.
+            if (tx.group_id && tx.status === 'COMPLETED' && (tx.type === 'PAYOUT' || tx.type === 'WITHDRAWAL')) {
+                await connection.query('UPDATE savings_groups SET total_pool = total_pool + ? WHERE id = ?', [tx.amount, tx.group_id]);
+            }
+            await connection.query('DELETE FROM transactions WHERE id = ?', [id]);
+        }
+        
+        await connection.commit();
+        res.json({ success: true });
+    } catch (error) {
+        await connection.rollback();
+        res.status(500).json({ error: error.message });
+    } finally {
+        connection.release();
+    }
+});
+
+app.put('/api/transactions/:id/rollback', async (req, res) => {
+    const { id } = req.params;
+    try {
+        await pool.query('UPDATE transactions SET is_rolled_back = 1 WHERE id = ?', [id]);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/transactions/bulk-rollback', async (req, res) => {
+    const { transactionIds } = req.body;
+    if (!transactionIds || !Array.isArray(transactionIds) || transactionIds.length === 0) {
+        return res.status(400).json({ message: "No transaction IDs provided." });
+    }
+    try {
+        const placeholders = transactionIds.map(() => '?').join(',');
+        await pool.query(`UPDATE transactions SET is_rolled_back = 1 WHERE id IN (${placeholders})`, transactionIds);
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });

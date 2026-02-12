@@ -100,7 +100,8 @@ class DatabaseService {
       amount: Number(t.amount || 0),
       date: t.date ? new Date(t.date).toISOString() : '',
       status: t.status || 'PENDING',
-      groupId: t.group_id || undefined
+      groupId: t.group_id || undefined,
+      is_rolled_back: t.is_rolled_back || false
     };
   }
 
