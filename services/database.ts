@@ -134,21 +134,27 @@ class DatabaseService {
                   const remoteGroups = await allGroupsRes.json();
                   this.groups = Array.isArray(remoteGroups) ? remoteGroups.map((g: any) => this.mapGroup(g)) : [];
               }
+
+              const allTxRes = await fetch(`${API_BASE}/transactions`);
+              if (allTxRes.ok) {
+                  const remoteTxs = await allTxRes.json();
+                  this.transactions = Array.isArray(remoteTxs) ? remoteTxs.map((t: any) => this.mapTransaction(t)) : [];
+              }
           } else {
               const groupsRes = await fetch(`${API_BASE}/users/${userId}/groups`);
               if (groupsRes.ok) {
                   const remoteGroups = await groupsRes.json();
                   this.groups = Array.isArray(remoteGroups) ? remoteGroups.map((g: any) => this.mapGroup(g)) : [];
               }
-          }
 
-          const url = activeGroupId 
-            ? `${API_BASE}/transactions/${userId}?groupId=${activeGroupId}` 
-            : `${API_BASE}/transactions/${userId}`;
-          const txRes = await fetch(url);
-          if (txRes.ok) {
-              const remoteTxs = await txRes.json();
-              this.transactions = Array.isArray(remoteTxs) ? remoteTxs.map((t: any) => this.mapTransaction(t)) : [];
+              const url = activeGroupId 
+                ? `${API_BASE}/transactions/${userId}?groupId=${activeGroupId}` 
+                : `${API_BASE}/transactions/${userId}`;
+              const txRes = await fetch(url);
+              if (txRes.ok) {
+                  const remoteTxs = await txRes.json();
+                  this.transactions = Array.isArray(remoteTxs) ? remoteTxs.map((t: any) => this.mapTransaction(t)) : [];
+              }
           }
       } else {
           const allGroupsRes = await fetch(`${API_BASE}/groups`);

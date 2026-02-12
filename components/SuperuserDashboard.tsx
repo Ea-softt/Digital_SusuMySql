@@ -51,6 +51,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   const [selectedUserForKYC, setSelectedUserForKYC] = useState<User | null>(null);
   const [viewUser, setViewUser] = useState<User | null>(null);
   const [userToReactivate, setUserToReactivate] = useState<User | null>(null);
+  const [viewUserGroups, setViewUserGroups] = useState<any[]>([]);
   
   // State for User Role Management
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -145,6 +146,16 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
       setLogs(db.getAuditLogs());
       setSystemConfig(db.getSystemConfig());
   }, [activeTab, members]);
+
+  // Fetch user groups when viewing user details
+  useEffect(() => {
+      if (viewUser) {
+          fetch(`http://localhost:3001/api/users/${viewUser.id}/groups`)
+            .then(res => res.json())
+            .then(data => setViewUserGroups(Array.isArray(data) ? data : []))
+            .catch(err => console.error("Failed to fetch user groups", err));
+      }
+  }, [viewUser]);
 
   // Save backup history to localStorage whenever it changes
   useEffect(() => {
@@ -2384,11 +2395,18 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
 
   const renderUserDetailsModal = () => {
       if (!viewUser) return null;
+
+      const userTransactions = transactions
+        .filter(t => t.userId === viewUser.id)
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
       return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full border border-gray-100 dark:border-gray-700 p-6 relative">
+             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-3xl w-full border border-gray-100 dark:border-gray-700 p-6 relative flex flex-col max-h-[90vh]">
                  <button onClick={() => setViewUser(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
-                 <div className="flex flex-col items-center mb-6">
+                 
+                 <div className="overflow-y-auto pr-2 flex-1">
+                     <div className="flex flex-col items-center mb-6">
                      <img src={viewUser.avatar} alt="" className="w-24 h-24 rounded-full border-4 border-gray-100 dark:border-gray-700 shadow-md mb-4" />
                      <h3 className="font-bold text-xl text-gray-900 dark:text-white">{viewUser.name}</h3>
                      <p className="text-gray-500 dark:text-gray-400">{viewUser.email}</p>
@@ -2398,9 +2416,9 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                              viewUser.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                          }`}>{viewUser.status}</span>
                      </div>
-                 </div>
+                     </div>
                  
-                 <div className="space-y-4">
+                     <div className="space-y-4">
                      <div className="flex justify-between border-b border-gray-100 dark:border-gray-700 pb-2">
                          <span className="text-gray-500 dark:text-gray-400">Phone</span>
                          <span className="font-medium text-gray-900 dark:text-white">{viewUser.phoneNumber || 'N/A'}</span>
@@ -2423,9 +2441,86 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                              <p className="text-sm text-red-800 dark:text-red-200">{viewUser.rejectionReason}</p>
                          </div>
                      )}
+                     </div>
+
+                     {/* Groups Section */}
+                     <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-700">
+                        <h4 className="font-bold text-lg text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                            <Users className="w-5 h-5 text-primary-600" /> Group Memberships
+                        </h4>
+                        {viewUserGroups.length > 0 ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {viewUserGroups.map((g: any) => (
+                                    <div key={g.id} className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+                                        <p className="font-bold text-gray-900 dark:text-white text-sm">{g.name}</p>
+                                        <div className="flex justify-between items-center mt-1">
+                                            <span className="text-xs text-gray-500 dark:text-gray-400">{g.membership_role}</span>
+                                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${g.membership_status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{g.membership_status}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-sm text-gray-500 italic">Not a member of any group.</p>
+                        )}
+                     </div>
+
+                     {/* Transaction History Section */}
+                     <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-700">
+                        <h4 className="font-bold text-lg text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                            <History className="w-5 h-5 text-primary-600" /> Transaction History
+                        </h4>
+                        <div className="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                                    <tr>
+                                        <th className="px-4 py-3">Date</th>
+                                        <th className="px-4 py-3">Type</th>
+                                        <th className="px-4 py-3 text-right">Amount</th>
+                                        <th className="px-4 py-3 text-right">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                    {userTransactions.length > 0 ? userTransactions.map(tx => {
+                                        const currency = groups.find(g => g.id === tx.groupId)?.currency || 'GHS';
+                                        return (
+                                        <tr key={tx.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                            <td className="px-4 py-3 text-gray-600 dark:text-gray-400 whitespace-nowrap">{new Date(tx.date).toLocaleDateString()}</td>
+                                            <td className="px-4 py-3">
+                                                <span className={`px-2 py-1 rounded text-xs font-bold ${
+                                                    tx.type === 'CONTRIBUTION' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
+                                                    tx.type === 'PAYOUT' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
+                                                    tx.type === 'WITHDRAWAL' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' :
+                                                    'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+                                                }`}>
+                                                    {tx.type}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-white">
+                                                {moneyFormatter(tx.amount, currency)}
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                                                    tx.status === 'COMPLETED' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 
+                                                    tx.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                                                    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                                                }`}>
+                                                    {tx.status}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    )}) : (
+                                        <tr>
+                                            <td colSpan={4} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">No transactions found.</td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                     </div>
                  </div>
                  
-                 <div className="mt-6 flex gap-3">
+                 <div className="mt-6 flex gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
                      <button onClick={() => openEditUser(viewUser)} className="flex-1 py-2 bg-primary-600 text-white rounded-lg font-bold hover:bg-primary-700">Edit Role</button>
                      {viewUser.status === 'ACTIVE' ? (
                          <button onClick={() => { handleUpdateStatus(viewUser.id, 'SUSPENDED'); setViewUser(null); }} className="flex-1 py-2 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700">Suspend</button>

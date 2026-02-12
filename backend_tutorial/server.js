@@ -469,6 +469,15 @@ app.put('/api/transactions/:id/verify', async (req, res) => {
     }
 });
 
+app.get('/api/transactions', async (req, res) => {
+    try {
+        const [rows] = await pool.query('SELECT t.*, u.name as userName FROM transactions t LEFT JOIN users u ON t.user_id = u.id ORDER BY t.date DESC');
+        res.json(rows);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.get('/api/transactions/:userId', async (req, res) => {
     try {
         const { groupId } = req.query;
