@@ -783,42 +783,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
       
       return (
       <div className="space-y-6 animate-fade-in">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Card 1: Member Contributions */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-100 dark:border-gray-700 shadow-sm">
-                <div className="flex items-center gap-3 mb-2">
-                    <Users className="w-6 h-6 text-blue-500" />
-                    <h4 className="text-lg font-bold text-gray-800 dark:text-white">Member Contributions</h4>
-                </div>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{moneyFormatter(group.totalPool, group.currency)}</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Total funds collected from members for the current cycle.</p>
-                <div className="mt-4">
-                     <button 
-                         onClick={() => setIsSplitPayoutModalOpen(true)}
-                         disabled={group.totalPool <= 0 || isPayoutCycleComplete}
-                         className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                     >
-                        <Shuffle className="w-4 h-4" /> Distribute Payout
-                    </button>
-                </div>
-            </div>
-
-            {/* Card 2: Leader Wallet */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-100 dark:border-gray-700 shadow-sm">
-                <div className="flex items-center gap-3 mb-2">
-                    <Wallet className="w-6 h-6 text-green-500" />
-                    <h4 className="text-lg font-bold text-gray-800 dark:text-white">Group Leader Wallet</h4>
-                </div>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{moneyFormatter(walletBalance, group.currency)}</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Your personal funds to manage group payments.</p>
-                <div className="mt-4 flex flex-col sm:flex-row gap-3">
-                     <button onClick={() => setWalletModalOpen(true)} className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg font-bold flex items-center justify-center gap-2"><Smartphone className="w-4 h-4" /> Load Wallet</button>
-                     <button onClick={() => setWithdrawModalOpen(true)} className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg font-bold flex items-center justify-center gap-2"><ArrowUpRight className="w-4 h-4" /> Withdraw</button>
-                     <button onClick={handleAdminContribution} className="flex-1 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-bold flex items-center justify-center gap-2"><DollarSign className="w-4 h-4" /> Pay My Share</button>
-                </div>
-            </div>
-        </div>
-
         {/* <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
             <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-6 flex items-center gap-2"><History className="w-5 h-5 text-gray-400"/> Payout History</h3>
             <div className="space-y-4">
