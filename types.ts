@@ -115,6 +115,7 @@ export interface Transaction {
   date: string; // ISO String YYYY-MM-DD
   status: 'COMPLETED' | 'PENDING' | 'FAILED';
   is_rolled_back?: boolean;
+  verifierId?: string;
 }
 
 // AI Chat Messages

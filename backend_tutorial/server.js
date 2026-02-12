@@ -142,6 +142,12 @@ async function initializeDatabase() {
             await connection.query(`ALTER TABLE transactions ADD COLUMN is_rolled_back BOOLEAN DEFAULT 0`);
         }
 
+        // Add verifier_id to transactions table
+        const [txVerifier] = await connection.query(`SHOW COLUMNS FROM transactions LIKE 'verifier_id'`);
+        if (txVerifier.length === 0) {
+            await connection.query(`ALTER TABLE transactions ADD COLUMN verifier_id VARCHAR(50)`);
+        }
+
         await connection.query(`
             CREATE TABLE IF NOT EXISTS group_messages (
                 id VARCHAR(50) PRIMARY KEY,
@@ -339,9 +345,9 @@ app.delete('/api/users/:id', async (req, res) => {
 });
 
 app.post('/api/transactions', async (req, res) => {
-    const { id, userId, groupId, type, amount, status } = req.body;
+    const { id, userId, groupId, type, amount, status, verifierId } = req.body;
     try {
-        await pool.query('INSERT INTO transactions (id, user_id, group_id, type, amount, status) VALUES (?, ?, ?, ?, ?, ?)', [id, userId, groupId, type, amount, status]);
+        await pool.query('INSERT INTO transactions (id, user_id, group_id, type, amount, status, verifier_id) VALUES (?, ?, ?, ?, ?, ?, ?)', [id, userId, groupId, type, amount, status, verifierId || null]);
         if (groupId && status === 'COMPLETED') {
             const mod = type === 'CONTRIBUTION' ? '+' : '-';
             await pool.query(`UPDATE savings_groups SET total_pool = total_pool ${mod} ? WHERE id = ?`, [amount, groupId]);
@@ -401,6 +407,43 @@ app.post('/api/transactions/bulk-rollback', async (req, res) => {
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/transactions/verification-pending/:userId', async (req, res) => {
+    try {
+        const [rows] = await pool.query(
+            'SELECT t.*, u.name as userName FROM transactions t LEFT JOIN users u ON t.user_id = u.id WHERE t.verifier_id = ? AND t.status = "PENDING"',
+            [req.params.userId]
+        );
+        res.json(rows);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.put('/api/transactions/:id/verify', async (req, res) => {
+    const { id } = req.params;
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+        const [txs] = await connection.query('SELECT * FROM transactions WHERE id = ?', [id]);
+        if (txs.length > 0) {
+            const tx = txs[0];
+            if (tx.status !== 'COMPLETED') {
+                await connection.query('UPDATE transactions SET status = ? WHERE id = ?', ['COMPLETED', id]);
+                if (tx.group_id && (tx.type === 'PAYOUT' || tx.type === 'WITHDRAWAL')) {
+                     await connection.query('UPDATE savings_groups SET total_pool = total_pool - ? WHERE id = ?', [tx.amount, tx.group_id]);
+                }
+            }
+        }
+        await connection.commit();
+        res.json({ success: true });
+    } catch (error) {
+        await connection.rollback();
+        res.status(500).json({ error: error.message });
+    } finally {
+        connection.release();
     }
 });
 

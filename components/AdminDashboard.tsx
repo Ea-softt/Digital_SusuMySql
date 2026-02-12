@@ -562,6 +562,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
           onConfirm: async () => {
               setIsProcessingSplitPayout(true);
               try {
+                  // Select a random verifier from active members (excluding superusers)
+                  const activeGroupMembers = members.filter(m => 
+                      m.role !== UserRole.SUPERUSER && 
+                      groupMemberships[m.id] === 'ACTIVE' && 
+                      m.status !== 'SUSPENDED'
+                  );
+                  const verifier = activeGroupMembers.length > 0 ? activeGroupMembers[Math.floor(Math.random() * activeGroupMembers.length)] : null;
+
                   const payoutTransactions: Transaction[] = selectedMembersForPayout.map(memberId => {
                       const member = members.find(m => m.id === memberId);
                       const amount = parseFloat(payoutAmounts[memberId]) || 0;
@@ -575,7 +583,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                           type: 'PAYOUT',
                           amount: amount,
                           date: new Date().toISOString().split('T')[0],
-                          status: 'COMPLETED'
+                          status: 'PENDING', // Set to PENDING for verification
+                          verifierId: verifier?.id
                       };
                   }).filter((tx): tx is Transaction => tx !== null);
                   
@@ -587,10 +596,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                       await db.addTransaction(tx, group.id);
                   }
 
-                  await db.updateGroup(group.id, { ...group, totalPool: totalPoolNumber - totalPayoutAmount });
+                  // Note: Pool is NOT updated here. It updates when status becomes COMPLETED via verification.
 
-                  alert(`Payout successful! ${moneyFormatter(Number(totalPayoutAmount), group.currency)} distributed among ${payoutTransactions.length} members.`);
-                  alert(`Payout successful! ${moneyFormatter(Number(totalPayoutAmount), String(group.currency))} distributed among ${payoutTransactions.length} members.`);
+                  let successMessage = `Payouts initiated! ${moneyFormatter(Number(totalPayoutAmount), group.currency)} allocated to ${payoutTransactions.length} members.`;
+
+                  if (verifier) {
+                      await db.sendGroupMessage(
+                          currentUser, 
+                          `🔍 VERIFICATION REQUIRED: ${verifier.name} has been selected to verify the pending payouts. Please check your dashboard to approve.`,
+                          group.id
+                      );
+                      successMessage += `\n\nVerification Required: ${verifier.name} must verify these transactions before funds are released.`;
+                  }
+
+                  alert(successMessage);
                   if (onRefresh) onRefresh();
                   
                   setIsSplitPayoutModalOpen(false);

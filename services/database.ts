@@ -101,7 +101,8 @@ class DatabaseService {
       date: t.date ? new Date(t.date).toISOString() : '',
       status: t.status || 'PENDING',
       groupId: t.group_id || undefined,
-      is_rolled_back: t.is_rolled_back || false
+      is_rolled_back: t.is_rolled_back || false,
+      verifierId: t.verifier_id || undefined
     };
   }
 
@@ -381,12 +382,35 @@ class DatabaseService {
                     type: transaction.type,
                     amount: transaction.amount,
                     status: transaction.status,
-                    groupId: groupId || null
+                    groupId: groupId || null,
+                    verifierId: transaction.verifierId
                 })
             });
             await this.syncData(transaction.userId);
         } catch (e) {}
     }
+  }
+
+  async getPendingVerifications(userId: string): Promise<Transaction[]> {
+    if (!this.isServerOnline) return [];
+    try {
+        const res = await fetch(`${API_BASE}/transactions/verification-pending/${userId}`);
+        if (res.ok) {
+            const remoteTxs = await res.json();
+            return Array.isArray(remoteTxs) ? remoteTxs.map((t: any) => this.mapTransaction(t)) : [];
+        }
+    } catch (e) {
+        console.warn("Failed to fetch pending verifications", e);
+    }
+    return [];
+  }
+
+  async verifyTransaction(txId: string): Promise<boolean> {
+      if (this.isServerOnline) {
+          const res = await fetch(`${API_BASE}/transactions/${txId}/verify`, { method: 'PUT' });
+          return res.ok;
+      }
+      return false;
   }
 
   getSystemConfig(): SystemConfig { return { ...this.systemConfig }; }

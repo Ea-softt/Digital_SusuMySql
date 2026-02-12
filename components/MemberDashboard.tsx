@@ -45,6 +45,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
   const [groupContributions, setGroupContributions] = useState<Transaction[]>([]);
   const [memberIdSet, setMemberIdSet] = useState<Set<string>>(new Set());
   const [userGroupStatus, setUserGroupStatus] = useState<string | null>(null);
+  const [pendingVerifications, setPendingVerifications] = useState<Transaction[]>([]);
 
   useEffect(() => {
     if (group.id) {
@@ -71,6 +72,11 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
             .then(res => res.json())
             .then(data => setUserGroupStatus(data.status))
             .catch(err => console.error("Error fetching user group status:", err));
+        
+        // Fetch pending verifications for this user
+        db.getPendingVerifications(userId)
+            .then(txs => setPendingVerifications(txs.filter(t => t.groupId === group.id)))
+            .catch(err => console.error("Error fetching verifications:", err));
     }
   }, [group.id, userId, onRefresh]);
 
@@ -303,6 +309,26 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
     alert("Group invite link copied to clipboard!");
   };
 
+  const handleVerifyPayouts = async () => {
+      if (pendingVerifications.length === 0) return;
+      
+      if (window.confirm(`Verify ${pendingVerifications.length} pending payout(s)? This will release the funds.`)) {
+          for (const tx of pendingVerifications) {
+              await db.verifyTransaction(tx.id);
+              await db.sendGroupMessage(
+                  currentUser,
+                  `✅ VERIFICATION COMPLETE: I have verified the payout of ${moneyFormatter(tx.amount, currency)} to ${tx.userName}.`,
+                  group.id
+              );
+          }
+          alert("Payouts verified successfully!");
+          setPendingVerifications([]);
+          if (onRefresh) onRefresh();
+          // Refresh local contributions/transactions
+          db.getGroupContributionTransactions(group.id).then(setGroupContributions);
+      }
+  };
+
   function renderTransactions() { return (
     <div className="space-y-6 animate-fade-in">
         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col md:flex-row justify-between items-center gap-4">
@@ -326,6 +352,12 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                 >
                     <ArrowRight className="w-4 h-4" /> Withdraw
                 </button>
+                {pendingVerifications.length > 0 && (
+                    <button onClick={handleVerifyPayouts} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors animate-pulse">
+                        <CheckCircle className="w-4 h-4" />
+                        Verify Payouts ({pendingVerifications.length})
+                    </button>
+                )}
                 {!isGlobalContext && <button
                     onClick={handlePayContribution}
                     disabled={isContributing || group.payoutSchedule.length === 0}
