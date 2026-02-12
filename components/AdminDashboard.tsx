@@ -1580,15 +1580,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
       onConfirm: async () => {
         try {
             const member = members.find(m => m.id === id);
-            const success = await db.updateGroupMembershipStatus(group.id, id, 'SUSPENDED');
+            
+            // Select a random verifier from active members (excluding superusers, admin, and target)
+            const potentialVerifiers = members.filter(m => 
+                m.role !== UserRole.SUPERUSER && 
+                m.id !== currentUser.id && 
+                m.id !== id && // Not the target
+                groupMemberships[m.id] === 'ACTIVE' && 
+                m.status !== 'SUSPENDED'
+            );
+            const verifier = potentialVerifiers.length > 0 ? potentialVerifiers[Math.floor(Math.random() * potentialVerifiers.length)] : null;
+
+            const success = await db.updateGroupMembershipStatus(group.id, id, 'SUSPENDED', verifier?.id);
             if (success) {
-                if (member) {
+                if (verifier && member) {
+                    await db.sendGroupMessage(currentUser, `🔍 VERIFICATION REQUIRED: ${verifier.name} has been selected to verify the suspension of ${member.name}.`, group.id);
+                    alert(`Suspension request initiated. ${verifier.name} must verify.`);
+                } else if (member) {
                     await db.sendGroupMessage(currentUser, `⛔ ${member.name} has been suspended from the group.`, group.id);
+                    alert("Member has been suspended from the group.");
                 }
                 if (onRefresh) onRefresh();
                 setViewMember(null);
                 setConfirmDialog(prev => ({ ...prev, isOpen: false }));
-                alert("Member has been suspended from the group.");
             } else {
                 throw new Error("Server operation failed.");
             }

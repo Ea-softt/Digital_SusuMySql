@@ -46,6 +46,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
   const [memberIdSet, setMemberIdSet] = useState<Set<string>>(new Set());
   const [userGroupStatus, setUserGroupStatus] = useState<string | null>(null);
   const [pendingVerifications, setPendingVerifications] = useState<Transaction[]>([]);
+  const [pendingMemberVerifications, setPendingMemberVerifications] = useState<any[]>([]);
 
   useEffect(() => {
     if (group.id) {
@@ -56,14 +57,19 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
             .then(res => res.json())
             .then((data: any[]) => {
                 const ids = new Set<string>();
+                const myVerifications: any[] = [];
                 if (Array.isArray(data)) {
                     data.forEach(m => {
                         if (m.group_id === group.id && m.status === 'ACTIVE') {
                             ids.add(m.user_id);
                         }
+                        if (m.group_id === group.id && m.verifier_id === userId) {
+                            myVerifications.push(m);
+                        }
                     });
                 }
                 setMemberIdSet(ids);
+                setPendingMemberVerifications(myVerifications);
             })
             .catch(err => console.error("Error fetching memberships:", err));
 
@@ -327,6 +333,22 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
           if (onRefresh) onRefresh();
           // Refresh local contributions/transactions
           db.getGroupContributionTransactions(group.id).then(setGroupContributions);
+      }
+  };
+
+  const handleVerifySuspension = async (membership: any) => {
+      const memberName = members.find(m => m.id === membership.user_id)?.name || 'Member';
+      if (window.confirm(`Verify suspension of ${memberName}? They will be removed from active status.`)) {
+          const success = await db.updateGroupMembershipStatus(group.id, membership.user_id, membership.pending_status);
+          if (success) {
+              await db.sendGroupMessage(
+                  currentUser,
+                  `✅ VERIFICATION COMPLETE: I have verified the suspension of ${memberName}.`,
+                  group.id
+              );
+              alert("Suspension verified.");
+              if (onRefresh) onRefresh();
+          }
       }
   };
 
@@ -986,14 +1008,22 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                   <p className="text-gray-500 dark:text-gray-400 text-sm">View your trusted circle.</p>
               </div>
               
-              <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-700 p-2 rounded-lg border border-gray-200 dark:border-gray-600 w-full sm:w-auto">
-                  <span className="text-xs text-gray-500 dark:text-gray-400 px-2">Invite Code:</span>
-                  <code className="font-mono text-sm font-bold text-primary-700 dark:text-primary-400">
-                      {group.inviteCode}
-                  </code>
-                  <button onClick={copyLink} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors" title="Copy Invite Link">
-                      <Copy className="w-4 h-4 text-gray-500 dark:text-gray-300" />
-                  </button>
+              <div className="flex items-center gap-3">
+                  {pendingMemberVerifications.length > 0 && (
+                      <button onClick={() => handleVerifySuspension(pendingMemberVerifications[0])} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors animate-pulse text-sm">
+                          <ShieldAlert className="w-4 h-4" />
+                          Verify Suspension ({pendingMemberVerifications.length})
+                      </button>
+                  )}
+                  <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-700 p-2 rounded-lg border border-gray-200 dark:border-gray-600 w-full sm:w-auto">
+                      <span className="text-xs text-gray-500 dark:text-gray-400 px-2">Invite Code:</span>
+                      <code className="font-mono text-sm font-bold text-primary-700 dark:text-primary-400">
+                          {group.inviteCode}
+                      </code>
+                      <button onClick={copyLink} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors" title="Copy Invite Link">
+                          <Copy className="w-4 h-4 text-gray-500 dark:text-gray-300" />
+                      </button>
+                  </div>
               </div>
           </div>
 

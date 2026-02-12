@@ -123,6 +123,16 @@ async function initializeDatabase() {
             await connection.query(`ALTER TABLE group_memberships ADD COLUMN is_deleted BOOLEAN DEFAULT 0`);
         }
 
+        // Add verifier_id and pending_status to group_memberships
+        const [gmVerifier] = await connection.query(`SHOW COLUMNS FROM group_memberships LIKE 'verifier_id'`);
+        if (gmVerifier.length === 0) {
+            await connection.query(`ALTER TABLE group_memberships ADD COLUMN verifier_id VARCHAR(50)`);
+        }
+        const [gmPendingStatus] = await connection.query(`SHOW COLUMNS FROM group_memberships LIKE 'pending_status'`);
+        if (gmPendingStatus.length === 0) {
+            await connection.query(`ALTER TABLE group_memberships ADD COLUMN pending_status ENUM('ACTIVE', 'PENDING', 'SUSPENDED', 'INVITED')`);
+        }
+
         await connection.query(`
             CREATE TABLE IF NOT EXISTS transactions (
                 id VARCHAR(50) PRIMARY KEY,
@@ -592,7 +602,7 @@ app.get('/api/group-membership/status/:userId/:groupId', async (req, res) => {
 });
 
 app.put('/api/group-membership/status', async (req, res) => {
-    const { userId, groupId, status } = req.body;
+    const { userId, groupId, status, verifierId } = req.body;
     if (!userId || !groupId || !status) {
         return res.status(400).json({ error: 'userId, groupId, and status are required.' });
     }
@@ -602,10 +612,20 @@ app.put('/api/group-membership/status', async (req, res) => {
     }
 
     try {
-        const [result] = await pool.query(
-            'UPDATE group_memberships SET status = ? WHERE user_id = ? AND group_id = ?',
-            [status, userId, groupId]
-        );
+        let result;
+        if (verifierId) {
+            // Request verification
+            [result] = await pool.query(
+                'UPDATE group_memberships SET pending_status = ?, verifier_id = ? WHERE user_id = ? AND group_id = ?',
+                [status, verifierId, userId, groupId]
+            );
+        } else {
+            // Apply status change (direct or verified)
+            [result] = await pool.query(
+                'UPDATE group_memberships SET status = ?, pending_status = NULL, verifier_id = NULL WHERE user_id = ? AND group_id = ?',
+                [status, userId, groupId]
+            );
+        }
 
         if (result.affectedRows === 0) {
             return res.status(404).json({ error: 'Membership not found.' });

@@ -654,13 +654,13 @@ class DatabaseService {
       return false;
     }
 
-    async updateGroupMembershipStatus(groupId: string, userId: string, status: 'ACTIVE' | 'PENDING' | 'SUSPENDED' | 'INVITED' | 'LEFT'): Promise<boolean> {
+    async updateGroupMembershipStatus(groupId: string, userId: string, status: 'ACTIVE' | 'PENDING' | 'SUSPENDED' | 'INVITED' | 'LEFT', verifierId?: string): Promise<boolean> {
       if (this.isServerOnline) {
         try {
           const res = await fetch(`${API_BASE}/group-membership/status`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId, groupId, status })
+            body: JSON.stringify({ userId, groupId, status, verifierId })
           });
           if (res.ok) {
             await this.syncData(userId, groupId);
