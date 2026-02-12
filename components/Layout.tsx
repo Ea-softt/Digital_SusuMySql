@@ -13,7 +13,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, UserRole, Notification, Group } from '../types';
 import { LogOut, LayoutDashboard, Users, Wallet, Settings, Menu, ShieldCheck, UserCog, Moon, Sun, Bell, X, Check, Trash2, Info, AlertTriangle, CheckCircle, AlertCircle, MessageSquare, ChevronDown, PlusCircle, HelpCircle } from 'lucide-react';
-import { MOCK_NOTIFICATIONS } from '../constants';
+import { db } from '../services/database';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -43,12 +43,13 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentUser, onLogout,
 
   // Initialize notifications based on user role
   useEffect(() => {
-    const userNotifs = MOCK_NOTIFICATIONS.filter(n => 
-      n.recipientId === 'ALL' || 
-      n.recipientId === currentUser.id ||
-      (currentUser.role === UserRole.ADMIN && n.recipientId === 'ADMIN')
-    ).sort((a, b) => b.timestamp - a.timestamp);
-    setNotifications(userNotifs);
+    const fetchNotifications = async () => {
+        const notifs = await db.getNotifications(currentUser.id);
+        setNotifications(notifs);
+    };
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 10000); // Poll every 10s
+    return () => clearInterval(interval);
   }, [currentUser]);
 
   // Close dropdowns when clicking outside
@@ -92,11 +93,13 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentUser, onLogout,
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const markAllAsRead = () => {
+  const markAllAsRead = async () => {
+    await Promise.all(notifications.filter(n => !n.read).map(n => db.markNotificationRead(n.id)));
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
   };
 
-  const deleteNotification = (id: string) => {
+  const deleteNotification = async (id: string) => {
+      await db.deleteNotification(id);
       setNotifications(prev => prev.filter(n => n.id !== id));
   };
 

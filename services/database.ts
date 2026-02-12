@@ -1,7 +1,7 @@
 
-import { Group, Transaction, User, GroupMessage, UserRole, AuditLog, SystemConfig, GroupMembership } from '../types'; 
+import { Group, Transaction, User, GroupMessage, UserRole, AuditLog, SystemConfig, GroupMembership, Notification } from '../types'; 
 
-const API_BASE = '/api';
+const API_BASE = 'http://localhost:3001/api';
 
 /**
  * PRODUCTION DATABASE SERVICE
@@ -536,6 +536,51 @@ class DatabaseService {
 
     this.messages.push(msg);
     return msg;
+  }
+
+  async getNotifications(userId: string): Promise<Notification[]> {
+    if (this.isServerOnline) {
+        try {
+            const res = await fetch(`${API_BASE}/notifications/${userId}`);
+            if (res.ok) {
+                const rows = await res.json();
+                return rows.map((r: any) => ({
+                    id: r.id,
+                    recipientId: r.recipient_id,
+                    title: r.title,
+                    message: r.message,
+                    type: r.type,
+                    timestamp: Number(r.timestamp),
+                    read: Boolean(r.is_read)
+                }));
+            }
+        } catch (e) { console.error(e); }
+    }
+    return [];
+  }
+
+  async createNotification(notification: Notification): Promise<void> {
+    if (this.isServerOnline) {
+        try {
+            await fetch(`${API_BASE}/notifications`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(notification)
+            });
+        } catch (e) { console.error(e); }
+    }
+  }
+
+  async markNotificationRead(id: string): Promise<void> {
+    if (this.isServerOnline) {
+        await fetch(`${API_BASE}/notifications/${id}/read`, { method: 'PUT' });
+    }
+  }
+
+  async deleteNotification(id: string): Promise<void> {
+    if (this.isServerOnline) {
+        await fetch(`${API_BASE}/notifications/${id}`, { method: 'DELETE' });
+    }
   }
 
   async deleteGroup(groupId: string): Promise<boolean> {

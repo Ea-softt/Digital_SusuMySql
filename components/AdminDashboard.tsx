@@ -232,6 +232,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
         const member = members.find(m => m.id === id);
         if (member) {
             await db.sendGroupMessage(currentUser, `👋 Welcome ${member.name} to the group!`, group.id);
+            await db.createNotification({
+                id: `notif-${Date.now()}`,
+                recipientId: id,
+                title: 'Membership Approved',
+                message: `You have been approved to join ${group.name}.`,
+                type: 'success',
+                timestamp: Date.now(),
+                read: false
+            });
         }
 
         if (onRefresh) onRefresh();
@@ -249,6 +258,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
 
         if (member) {
              await db.sendGroupMessage(currentUser, `🚫 Membership request for ${member.name} was rejected.`, group.id);
+             await db.createNotification({
+                id: `notif-${Date.now()}`,
+                recipientId: id,
+                title: 'Membership Rejected',
+                message: `Your request to join ${group.name} was rejected.`,
+                type: 'error',
+                timestamp: Date.now(),
+                read: false
+            });
         }
 
         if (onRefresh) onRefresh();
@@ -268,6 +286,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
         // we update via updateUser logic or similar if needed, or re-add as completed.
         // For this hybrid, we assume re-sync handles it after the leader clicks.
         await db.sendGroupMessage(currentUser, `✅ Contribution of ${moneyFormatter(tx.amount, group.currency)} from ${tx.userName} confirmed.`, group.id);
+        await db.createNotification({
+            id: `notif-${Date.now()}`,
+            recipientId: tx.userId,
+            title: 'Contribution Approved',
+            message: `Your contribution of ${moneyFormatter(tx.amount, group.currency)} has been confirmed.`,
+            type: 'success',
+            timestamp: Date.now(),
+            read: false
+        });
         alert("Verification confirmed! Updating central ledger...");
         if (onRefresh) onRefresh();
         setConfirmDialog(prev => ({ ...prev, isOpen: false }));
@@ -283,6 +310,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
     try {
         // Mock rejection as we don't have a specific backend endpoint for this.
         await db.sendGroupMessage(currentUser, `❌ Contribution from ${tx.userName} was rejected.`, group.id);
+        await db.createNotification({
+            id: `notif-${Date.now()}`,
+            recipientId: tx.userId,
+            title: 'Contribution Rejected',
+            message: `Your contribution of ${moneyFormatter(tx.amount, group.currency)} was rejected. Please contact admin.`,
+            type: 'error',
+            timestamp: Date.now(),
+            read: false
+        });
         alert("Transaction rejected and member notified.");
         if (onRefresh) onRefresh(); // Re-sync data from the server.
         setConfirmDialog(prev => ({ ...prev, isOpen: false }));
@@ -326,6 +362,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
 
         if (member) {
             await db.sendGroupMessage(currentUser, `🚫 ${member.name} has been removed from the group.`, group.id);
+            await db.createNotification({
+                id: `notif-${Date.now()}`,
+                recipientId: userId,
+                title: 'Removed from Group',
+                message: `You have been removed from ${group.name}.`,
+                type: 'error',
+                timestamp: Date.now(),
+                read: false
+            });
         }
         
         if (onRefresh) onRefresh();
@@ -339,11 +384,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   const handleUpdateGroup = async () => {
     try {
         await db.updateGroup(group.id, group);
+
+        // Notify all members of the group about the update
+        for (const member of activeMembersInCycle) {
+            if (member.id !== currentUser.id) {
+                await db.createNotification({
+                    id: `notif-g-update-${Date.now()}-${member.id}`,
+                    recipientId: member.id,
+                    title: 'Group Settings Updated',
+                    message: `The settings for group '${group.name}' have been updated by the admin.`,
+                    type: 'info', timestamp: Date.now(), read: false
+                });
+            }
+        }
         alert("Group settings saved permanently to MySQL.");
         if (onRefresh) onRefresh();
         setConfirmDialog(prev => ({ ...prev, isOpen: false }));
-    } catch (err: any) {
-        alert(`Failed to save settings: ${err.message || "Unknown error"}`);
+    } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        alert(`Failed to save settings: ${message}`);
     }
   };
 
@@ -362,6 +421,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
       }));
 
       await db.sendGroupMessage(currentUser, `🔄 A new payout cycle has started!`, group.id);
+      await db.createNotification({
+          id: `notif-${Date.now()}`,
+          recipientId: 'ALL',
+          title: 'New Cycle Started',
+          message: `A new payout cycle has started for ${group.name}. Check your schedule!`,
+          type: 'info',
+          timestamp: Date.now(),
+          read: false
+      });
       if (onRefresh) onRefresh();
       alert("New payout cycle started successfully");
     } catch (error) {
@@ -483,6 +551,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
           };
 
           await db.addTransaction(newTx);
+          // Notify Superuser of withdrawal request
+          const superuser = members.find(m => m.role === UserRole.SUPERUSER);
+          if (superuser) {
+              await db.createNotification({
+                  id: `notif-wd-req-${Date.now()}`, recipientId: superuser.id,
+                  title: 'Withdrawal Request',
+                  message: `${currentUser.name} has requested to withdraw ${moneyFormatter(amount, group.currency)}.`,
+                  type: 'warning', timestamp: Date.now(), read: false
+              });
+          }
           
           if (onRefresh) onRefresh();
           setWithdrawModalOpen(false);
@@ -519,6 +597,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                   };
                   await db.addTransaction(newTx, group.id);
                   await db.sendGroupMessage(currentUser, `💰 I just contributed ${moneyFormatter(group.contributionAmount, group.currency)}!`, group.id);
+                  
+                  // Notify all other members in the group
+                  for (const member of activeMembersInCycle) {
+                      if (member.id !== currentUser.id) {
+                          await db.createNotification({
+                              id: `notif-admin-contrib-${Date.now()}-${member.id}`, recipientId: member.id,
+                              title: 'Leader Contribution', message: `Your group leader, ${currentUser.name}, has paid their share for group '${group.name}'.`,
+                              type: 'info', timestamp: Date.now(), read: false
+                          });
+                      }
+                  }
+
                   if (onRefresh) onRefresh();
                   alert("Admin contribution recorded successfully.");
               } catch (err) {
@@ -633,6 +723,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                           group.id
                       );
                       successMessage += `\n\nVerification Required: ${verifier.name} must verify these transactions before funds are released.`;
+                      await db.createNotification({
+                          id: `notif-${Date.now()}`,
+                          recipientId: verifier.id,
+                          title: 'Payout Verification Needed',
+                          message: `You have been selected to verify a split payout distribution.`,
+                          type: 'warning',
+                          timestamp: Date.now(),
+                          read: false
+                      });
                   } else {
                       successMessage += `\n\nPayout completed immediately (No independent verifier available).`;
                   }
@@ -1216,6 +1315,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                             `🔍 VERIFICATION REQUIRED: ${verifier.name} has been selected to verify the pending payout to ${nextRecipient.name}. Please check your dashboard to approve.`,
                             group.id
                         );
+                        await db.createNotification({
+                            id: `notif-${Date.now()}`,
+                            recipientId: verifier.id,
+                            title: 'Payout Verification Needed',
+                            message: `Please verify the payout of ${moneyFormatter(payoutAmount, group.currency)} to ${nextRecipient.name}.`,
+                            type: 'warning',
+                            timestamp: Date.now(),
+                            read: false
+                        });
                         successMessage += `\n\nVerification Required: ${verifier.name} must verify this transaction before funds are released.`;
                     } else {
                         successMessage += `\n\nPayout completed immediately (No independent verifier available).`;
@@ -1595,6 +1703,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
             if (success) {
                 if (verifier && member) {
                     await db.sendGroupMessage(currentUser, `🔍 VERIFICATION REQUIRED: ${verifier.name} has been selected to verify the suspension of ${member.name}.`, group.id);
+                    await db.createNotification({
+                        id: `notif-${Date.now()}`,
+                        recipientId: verifier.id,
+                        title: 'Suspension Verification Needed',
+                        message: `Please verify the suspension request for ${member.name}.`,
+                        type: 'warning',
+                        timestamp: Date.now(),
+                        read: false
+                    });
                     alert(`Suspension request initiated. ${verifier.name} must verify.`);
                 } else if (member) {
                     await db.sendGroupMessage(currentUser, `⛔ ${member.name} has been suspended from the group.`, group.id);
@@ -1714,7 +1831,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   const renderMemberDetailsModal = () => {
     if (!viewMember) return null;
 
-    const memberTransactions = transactions.filter(t => t.userId === viewMember.id);
+    const memberTransactions = [
+        ...groupContributionTransactions.filter(t => t.userId === viewMember.id),
+        ...allTimePayoutHistory.filter(t => t.userId === viewMember.id)
+    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     const groupStatus = groupMemberships[viewMember.id];
     // A global suspension by a superuser should override the group-specific status.
     const effectiveStatus = viewMember.status === 'SUSPENDED' ? 'SUSPENDED' : groupStatus;

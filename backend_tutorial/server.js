@@ -169,6 +169,18 @@ async function initializeDatabase() {
                 FOREIGN KEY (group_id) REFERENCES savings_groups(id) ON DELETE CASCADE
             )
         `);
+
+        await connection.query(`
+            CREATE TABLE IF NOT EXISTS notifications (
+                id VARCHAR(50) PRIMARY KEY,
+                recipient_id VARCHAR(50) NOT NULL,
+                title VARCHAR(255) NOT NULL,
+                message TEXT NOT NULL,
+                type ENUM('success', 'warning', 'info', 'error') DEFAULT 'info',
+                is_read BOOLEAN DEFAULT FALSE,
+                timestamp BIGINT NOT NULL
+            )
+        `);
         
         const [users] = await connection.query('SELECT id FROM users WHERE role = "SUPERUSER" LIMIT 1');
         if (users.length === 0) {
@@ -583,6 +595,61 @@ app.post('/api/groups/join', async (req, res) => {
         res.status(500).json({ error: error.message });
     } finally {
         connection.release();
+    }
+});
+
+// --- NOTIFICATIONS API ---
+
+app.get('/api/notifications/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const [users] = await pool.query('SELECT role FROM users WHERE id = ?', [userId]);
+        const role = users.length > 0 ? users[0].role : 'MEMBER';
+
+        let query = 'SELECT * FROM notifications WHERE recipient_id = ? OR recipient_id = "ALL"';
+        const params = [userId];
+
+        if (role === 'ADMIN' || role === 'SUPERUSER') {
+            query += ' OR recipient_id = "ADMIN"';
+        }
+        
+        query += ' ORDER BY timestamp DESC LIMIT 50';
+
+        const [rows] = await pool.query(query, params);
+        res.json(rows);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/notifications', async (req, res) => {
+    const { id, recipientId, title, message, type, timestamp } = req.body;
+    try {
+        await pool.query(
+            'INSERT INTO notifications (id, recipient_id, title, message, type, timestamp, is_read) VALUES (?, ?, ?, ?, ?, ?, 0)',
+            [id, recipientId, title, message, type, timestamp]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.put('/api/notifications/:id/read', async (req, res) => {
+    try {
+        await pool.query('UPDATE notifications SET is_read = 1 WHERE id = ?', [req.params.id]);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.delete('/api/notifications/:id', async (req, res) => {
+    try {
+        await pool.query('DELETE FROM notifications WHERE id = ?', [req.params.id]);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
 });
 

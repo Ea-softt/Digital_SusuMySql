@@ -47,21 +47,24 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
   const [userGroupStatus, setUserGroupStatus] = useState<string | null>(null);
   const [pendingVerifications, setPendingVerifications] = useState<Transaction[]>([]);
   const [pendingMemberVerifications, setPendingMemberVerifications] = useState<any[]>([]);
+  const [groupAdmins, setGroupAdmins] = useState<string[]>([]);
 
   useEffect(() => {
     if (group.id) {
         db.getGroupContributionTransactions(group.id).then(setGroupContributions);
 
         // Fetch memberships to filter members list
-        fetch('/api/group-memberships')
+        fetch('http://localhost:3001/api/group-memberships')
             .then(res => res.json())
             .then((data: any[]) => {
                 const ids = new Set<string>();
                 const myVerifications: any[] = [];
+                const admins: string[] = [];
                 if (Array.isArray(data)) {
                     data.forEach(m => {
-                        if (m.group_id === group.id && m.status === 'ACTIVE') {
-                            ids.add(m.user_id);
+                        if (m.group_id === group.id) {
+                            if (m.status === 'ACTIVE') ids.add(m.user_id);
+                            if (m.role === 'ADMIN') admins.push(m.user_id);
                         }
                         if (m.group_id === group.id && m.verifier_id === userId) {
                             myVerifications.push(m);
@@ -69,12 +72,13 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                     });
                 }
                 setMemberIdSet(ids);
+                setGroupAdmins(admins);
                 setPendingMemberVerifications(myVerifications);
             })
             .catch(err => console.error("Error fetching memberships:", err));
 
         // Fetch current user's specific status in this group
-        fetch(`/api/group-membership/status/${userId}/${group.id}`)
+        fetch(`http://localhost:3001/api/group-membership/status/${userId}/${group.id}`)
             .then(res => res.json())
             .then(data => setUserGroupStatus(data.status))
             .catch(err => console.error("Error fetching user group status:", err));
@@ -146,6 +150,15 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
         const result = await db.joinGroupRequest(userId, joinCode);
         if (result.success) {
             if (onRefresh) onRefresh();
+            await db.createNotification({
+                id: `notif-join-req-${Date.now()}`,
+                recipientId: 'ADMIN',
+                title: 'New Member Request',
+                message: `${currentUser.name} has requested to join a group using code: ${joinCode}.`,
+                type: 'warning',
+                timestamp: Date.now(),
+                read: false
+            });
             alert("Request sent successfully! Wait for leader approval.");
         } else {
             setJoinError(result.message);
@@ -193,6 +206,47 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
           };
           await db.addTransaction(newTx, group.id);
           await db.sendGroupMessage(currentUser, `💰 I just contributed ${moneyFormatter(group.contributionAmount, currency)}!`, group.id);
+          
+          // Notify Group Admins
+          for (const adminId of groupAdmins) {
+              if (adminId === currentUser.id) continue;
+              await db.createNotification({
+                  id: `notif-contrib-${Date.now()}-${adminId}`,
+                  recipientId: adminId,
+                  title: 'New Contribution',
+                  message: `${currentUser.name} has contributed ${moneyFormatter(group.contributionAmount, currency)}.`,
+                  type: 'info',
+                  timestamp: Date.now(),
+                  read: false
+              });
+          }
+
+          // Notify other members
+          const groupMembers = members.filter(m => memberIdSet.has(m.id));
+          for (const member of groupMembers) {
+              if (member.id === currentUser.id || groupAdmins.includes(member.id)) continue;
+              await db.createNotification({
+                  id: `notif-contrib-mem-${Date.now()}-${member.id}`,
+                  recipientId: member.id,
+                  title: 'Group Activity',
+                  message: `${currentUser.name} has contributed to the pool.`,
+                  type: 'info',
+                  timestamp: Date.now(),
+                  read: false
+              });
+          }
+
+          // Notify self
+          await db.createNotification({
+              id: `notif-contrib-self-${Date.now()}`,
+              recipientId: currentUser.id,
+              title: 'Contribution Successful',
+              message: `You have successfully contributed ${moneyFormatter(group.contributionAmount, currency)}.`,
+              type: 'success',
+              timestamp: Date.now(),
+              read: false
+          });
+
           if (onRefresh) onRefresh();
           setContributionConfirmOpen(false);
           alert(`Successfully contributed ${currency} ${group.contributionAmount}!`);
@@ -300,6 +354,15 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
               groupId: isGlobalContext ? undefined : group.id,
           };
           await db.addTransaction(newTx, isGlobalContext ? undefined : group.id);
+          await db.createNotification({
+              id: `notif-wd-${Date.now()}`,
+              recipientId: currentUser.id,
+              title: 'Withdrawal Processed',
+              message: `Your withdrawal of ${currency} ${amount} was successful.`,
+              type: 'success',
+              timestamp: Date.now(),
+              read: false
+          });
           setWithdrawAmount('');
           setWithdrawPassword('');
           if (onRefresh) onRefresh();
@@ -327,6 +390,15 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                   `✅ VERIFICATION COMPLETE: I have verified the payout of ${moneyFormatter(tx.amount, currency)} to ${tx.userName}.`,
                   group.id
               );
+              await db.createNotification({
+                  id: `notif-${Date.now()}`,
+                  recipientId: tx.userId,
+                  title: 'Payout Verified',
+                  message: `Your payout of ${moneyFormatter(tx.amount, currency)} has been verified and released.`,
+                  type: 'success',
+                  timestamp: Date.now(),
+                  read: false
+              });
           }
           alert("Payouts verified successfully!");
           setPendingVerifications([]);
@@ -346,6 +418,17 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                   `✅ VERIFICATION COMPLETE: I have verified the suspension of ${memberName}.`,
                   group.id
               );
+              for (const adminId of groupAdmins) {
+                  await db.createNotification({
+                      id: `notif-susp-verified-${Date.now()}`,
+                      recipientId: adminId,
+                      title: 'Suspension Verified',
+                      message: `${currentUser.name} has verified the suspension of ${memberName}.`,
+                      type: 'info',
+                      timestamp: Date.now(),
+                      read: false
+                  });
+              }
               alert("Suspension verified.");
               if (onRefresh) onRefresh();
           }
@@ -1119,6 +1202,17 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
           await db.sendGroupMessage(currentUser, `👋 I have left the group.`, group.id);
           const success = await db.leaveGroup(group.id, userId);
           if (success) {
+              for (const adminId of groupAdmins) {
+                  await db.createNotification({
+                      id: `notif-leave-${Date.now()}-${adminId}`,
+                      recipientId: adminId,
+                      title: 'Member Left Group',
+                      message: `${currentUser.name} has left your group '${group.name}'.`,
+                      type: 'info',
+                      timestamp: Date.now(),
+                      read: false
+                  });
+              }
               alert("You have successfully left the group.");
               if (onRefresh) onRefresh();
           } else {
