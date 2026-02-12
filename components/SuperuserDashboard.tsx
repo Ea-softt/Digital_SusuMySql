@@ -137,6 +137,43 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   const groupIconInputRef = useRef<HTMLInputElement>(null);
 
   // Update activeTab when initialTab prop changes (from sidebar navigation)
+  const handleGroupAction = async () => {
+      if (!groupActionConfirm) return;
+      const { group, action } = groupActionConfirm;
+      const newStatus = action === 'approve' ? 'ACTIVE' : 'REJECTED';
+      
+      try {
+          await db.updateGroupStatus(group.id, newStatus);
+          
+          // Notify the creator (Admin)
+          // In a real app, we'd fetch the specific admin of this group. 
+          // For now, we'll assume we can find them in the members list if loaded, or just rely on the status update.
+          const creator = members.find(m => m.role === 'ADMIN' && viewUserGroups.some(g => g.id === group.id)); // Simplified check
+          
+          if (creator) {
+               await db.createNotification({
+                  id: `notif-group-${Date.now()}`,
+                  recipientId: creator.id,
+                  title: `Group ${action === 'approve' ? 'Approved' : 'Rejected'}`,
+                  message: action === 'approve' ? `Your group "${group.name}" has been approved and is now active.` : `Your group "${group.name}" has been rejected.`,
+                  type: action === 'approve' ? 'success' : 'error',
+                  timestamp: Date.now(),
+                  read: false
+              });
+          }
+
+          alert(`Group ${action === 'approve' ? 'approved' : 'rejected'} successfully.`);
+          onRefresh();
+      } catch (e) {
+          console.error(e);
+          alert("Failed to update group status.");
+      } finally {
+          setGroupActionConfirm(null);
+      }
+  };
+
+ 
+ //uptherre
   useEffect(() => {
       setActiveTab(initialTab);
   }, [initialTab]);
@@ -921,8 +958,9 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
 
   const renderUserManagement = () => {
     const filteredMembers = members.filter(m => 
-      m.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      m.email.toLowerCase().includes(searchTerm.toLowerCase())
+      m.role !== UserRole.SUPERUSER &&
+      (m.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      m.email.toLowerCase().includes(searchTerm.toLowerCase()))
     );
 
     return (
@@ -2741,6 +2779,30 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
     );
   };
 
+  const renderGroupActionConfirmModal = () => {
+      if (!groupActionConfirm) return null;
+      const { group, action } = groupActionConfirm;
+      
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6 max-w-sm w-full border border-gray-100 dark:border-gray-700 text-center">
+                 <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${action === 'approve' ? 'bg-green-100 dark:bg-green-900/30 text-green-600' : 'bg-red-100 dark:bg-red-900/30 text-red-600'}`}>
+                     {action === 'approve' ? <CheckCircle className="w-8 h-8" /> : <XCircle className="w-8 h-8" />}
+                 </div>
+                 <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-2">{action === 'approve' ? 'Approve Group' : 'Reject Group'}</h3>
+                 <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">
+                     Are you sure you want to {action} <span className="font-bold text-gray-900 dark:text-white">{group.name}</span>?
+                     {action === 'approve' ? ' The leader will gain full control.' : ' This action cannot be undone.'}
+                 </p>
+                 <div className="flex gap-3">
+                     <button onClick={() => setGroupActionConfirm(null)} className="flex-1 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg font-medium text-gray-700 dark:text-gray-300">Cancel</button>
+                     <button onClick={handleGroupAction} className={`flex-1 py-2 text-white rounded-lg font-bold ${action === 'approve' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>Confirm</button>
+                 </div>
+             </div>
+        </div>
+      );
+  };
+
   return (
     <div className="space-y-6">
       {/* Tab Navigation */}
@@ -2914,6 +2976,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
       {renderAutoVerifyConfirmModal()}
       {renderWithdrawConfirmModal()}
       {renderReactivateModal()}
+      {renderGroupActionConfirmModal()}
       
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (

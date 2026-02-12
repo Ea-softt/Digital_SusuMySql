@@ -100,6 +100,12 @@ async function initializeDatabase() {
             await connection.query(`ALTER TABLE savings_groups ADD COLUMN scheduled_payout_amount DECIMAL(15, 2) DEFAULT 0.00`);
         }
 
+        // Add status column to savings_groups for approval workflow
+        const [sgStatus] = await connection.query(`SHOW COLUMNS FROM savings_groups LIKE 'status'`);
+        if (sgStatus.length === 0) {
+            await connection.query(`ALTER TABLE savings_groups ADD COLUMN status ENUM('ACTIVE', 'PENDING_VERIFICATION', 'REJECTED') DEFAULT 'ACTIVE'`);
+        }
+
         await connection.query(`
             CREATE TABLE IF NOT EXISTS group_memberships (
                 user_id VARCHAR(50),
@@ -233,8 +239,8 @@ app.post('/api/groups', async (req, res) => {
     try {
         await connection.beginTransaction();
         await connection.query(
-            `INSERT INTO savings_groups (id, name, contribution_amount, currency, frequency, invite_code, welcome_message, icon, scheduled_payout_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [id, name, contributionAmount, currency, frequency, inviteCode, welcomeMessage, icon, scheduledPayoutAmount || 0]
+            `INSERT INTO savings_groups (id, name, contribution_amount, currency, frequency, invite_code, welcome_message, icon, scheduled_payout_amount, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [id, name, contributionAmount, currency, frequency, inviteCode, welcomeMessage, icon, scheduledPayoutAmount || 0, 'PENDING_VERIFICATION']
         );
         if (creatorId) {
             await connection.query(`INSERT INTO group_memberships (user_id, group_id, role, status) VALUES (?, ?, 'ADMIN', 'ACTIVE')`, [creatorId, id]);
@@ -274,6 +280,19 @@ app.put('/api/groups/:id', async (req, res) => {
         res.json({ success: true });
     } catch (error) {
         console.error(`Group update failed for ID ${req.params.id}:`, error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.put('/api/groups/:id/status', async (req, res) => {
+    const { status } = req.body;
+    if (!['ACTIVE', 'REJECTED', 'PENDING_VERIFICATION'].includes(status)) {
+        return res.status(400).json({ error: 'Invalid status' });
+    }
+    try {
+        await pool.query('UPDATE savings_groups SET status = ? WHERE id = ?', [status, req.params.id]);
+        res.json({ success: true });
+    } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
