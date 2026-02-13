@@ -171,7 +171,8 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
       const newStatus = action === 'approve' ? 'ACTIVE' : 'REJECTED';
       
       try {
-          await db.updateGroupStatus(group.id, newStatus);
+         // await db.updateGroupStatus(group.id, newStatus);
+          await db.updateGroupStatus(group.id, newStatus, currentUser.id);
           
           // Notify the creator (Admin)
           const res = await fetch('http://localhost:3001/api/group-memberships');
@@ -1131,7 +1132,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                                 <button onClick={() => setGroupActionConfirm({ group, action: 'approve' })} className="p-1 bg-green-100 text-green-700 rounded" title="Approve"><CheckCircle className="w-4 h-4" /></button>
                                                 {!verifiedCreators.has(group.id) && (
                                                     <button 
-                                                        onClick={() => { setCurrentVideoCallGroup(group); setIsVideoCallOpen(true); }} 
+                                                        onClick={() => { setCurrentVideoCallGroup(group); setIsVideoCallOpen(true); db.updateGroup(group.id, { callActive: true }); }} 
                                                         className="p-1 bg-blue-100 text-blue-700 rounded" 
                                                         title="Start Video Verification"
                                                     >
@@ -2999,9 +3000,9 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
 
                   {/* Controls */}
                   <div className="p-6 bg-gray-800 flex justify-center items-center gap-8 border-t border-gray-700">
-                      <button onClick={() => setIsVideoCallOpen(false)} className="p-4 rounded-full bg-red-600 hover:bg-red-700 text-white transition-colors shadow-lg hover:scale-105 transform duration-200" title="End Call"><Phone className="w-6 h-6 rotate-[135deg]" /></button>
+                      <button onClick={() => { setIsVideoCallOpen(false); if(currentVideoCallGroup) db.updateGroup(currentVideoCallGroup.id, { callActive: false }); }} className="p-4 rounded-full bg-red-600 hover:bg-red-700 text-white transition-colors shadow-lg hover:scale-105 transform duration-200" title="End Call"><Phone className="w-6 h-6 rotate-[135deg]" /></button>
                       <div className="h-12 w-px bg-gray-700 mx-4"></div>
-                      <button onClick={() => { setVerifiedCreators(prev => new Set(prev).add(currentVideoCallGroup.id)); setIsVideoCallOpen(false); alert(`Identity of ${creator?.name || 'Creator'} Verified via Video Call.`); }} className="px-8 py-3 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold flex items-center gap-2 transition-all shadow-lg hover:scale-105 transform duration-200"><CheckCircle className="w-5 h-5" /> Pass Verification</button>
+                      <button onClick={() => { setVerifiedCreators(prev => new Set(prev).add(currentVideoCallGroup.id)); setIsVideoCallOpen(false); if(currentVideoCallGroup) db.updateGroup(currentVideoCallGroup.id, { callActive: false }); alert(`Identity of ${creator?.name || 'Creator'} Verified via Video Call.`); }} className="px-8 py-3 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold flex items-center gap-2 transition-all shadow-lg hover:scale-105 transform duration-200"><CheckCircle className="w-5 h-5" /> Pass Verification</button>
                   </div>
               </div>
           </div>

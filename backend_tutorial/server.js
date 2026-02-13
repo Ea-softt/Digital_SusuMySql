@@ -106,6 +106,18 @@ async function initializeDatabase() {
             await connection.query(`ALTER TABLE savings_groups ADD COLUMN status ENUM('ACTIVE', 'PENDING_VERIFICATION', 'REJECTED') DEFAULT 'ACTIVE'`);
         }
 
+        // Add approved_by column to savings_groups
+        const [sgApprovedBy] = await connection.query(`SHOW COLUMNS FROM savings_groups LIKE 'approved_by'`);
+        if (sgApprovedBy.length === 0) {
+            await connection.query(`ALTER TABLE savings_groups ADD COLUMN approved_by VARCHAR(50)`);
+        }
+
+        // Add call_active column to savings_groups
+        const [sgCallActive] = await connection.query(`SHOW COLUMNS FROM savings_groups LIKE 'call_active'`);
+        if (sgCallActive.length === 0) {
+            await connection.query(`ALTER TABLE savings_groups ADD COLUMN call_active BOOLEAN DEFAULT 0`);
+        }
+
         await connection.query(`
             CREATE TABLE IF NOT EXISTS group_memberships (
                 user_id VARCHAR(50),
@@ -258,7 +270,7 @@ app.post('/api/groups', async (req, res) => {
 });
 
 app.put('/api/groups/:id', async (req, res) => {
-    const { name, contributionAmount, currency, frequency, welcomeMessage, icon, payoutSchedule, scheduledPayoutAmount } = req.body;
+    const { name, contributionAmount, currency, frequency, welcomeMessage, icon, payoutSchedule, scheduledPayoutAmount, callActive } = req.body;
     const updates = [];
     const values = [];
 
@@ -270,6 +282,7 @@ app.put('/api/groups/:id', async (req, res) => {
     if (icon) { updates.push('icon = ?'); values.push(icon); }
     if (payoutSchedule) { updates.push('payout_schedule = ?'); values.push(JSON.stringify(payoutSchedule)); }
     if (scheduledPayoutAmount !== undefined) { updates.push('scheduled_payout_amount = ?'); values.push(scheduledPayoutAmount); }
+    if (callActive !== undefined) { updates.push('call_active = ?'); values.push(callActive); }
 
     if (updates.length === 0) return res.json({ success: true, message: 'No changes provided.' });
 
@@ -285,12 +298,16 @@ app.put('/api/groups/:id', async (req, res) => {
 });
 
 app.put('/api/groups/:id/status', async (req, res) => {
-    const { status } = req.body;
+    const { status, approvedBy } = req.body;
     if (!['ACTIVE', 'REJECTED', 'PENDING_VERIFICATION'].includes(status)) {
         return res.status(400).json({ error: 'Invalid status' });
     }
     try {
-        await pool.query('UPDATE savings_groups SET status = ? WHERE id = ?', [status, req.params.id]);
+        if (approvedBy) {
+            await pool.query('UPDATE savings_groups SET status = ?, approved_by = ? WHERE id = ?', [status, approvedBy, req.params.id]);
+        } else {
+            await pool.query('UPDATE savings_groups SET status = ? WHERE id = ?', [status, req.params.id]);
+        }
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });

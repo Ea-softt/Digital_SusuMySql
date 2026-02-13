@@ -102,6 +102,8 @@ export interface Group {
   cycleStartDate?: string;
   cycleEndDate?: string;
   scheduledPayoutAmount?: number; // Estimated payout amount
+  approvedBy?: string;
+  callActive?: boolean;
 }
 
 // Any money movement is a Transaction

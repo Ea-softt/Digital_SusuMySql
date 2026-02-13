@@ -217,6 +217,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
     setWalletBalance(balance);
   }, [initialMembers, initialTransactions, initialGroup, currentUser.id]);
 
+  // Poll for call status to auto-close modal when Superuser ends call
+  useEffect(() => {
+      let interval: NodeJS.Timeout;
+      if (isVideoCallOpen && group.id) {
+          interval = setInterval(async () => {
+              await db.syncData(currentUser.id);
+              const updatedGroup = db.getGroups().find(g => g.id === group.id);
+              if (updatedGroup && !updatedGroup.callActive) {
+                  setIsVideoCallOpen(false);
+              }
+          }, 2000);
+      }
+      return () => clearInterval(interval);
+  }, [isVideoCallOpen, group.id, currentUser.id]);
+
   const renderVideoCallModal = () => {
       if (!isVideoCallOpen) return null;
       return (
@@ -2025,7 +2040,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   return (
     <div className="space-y-6">
         {/* Incoming Call Alert Banner */}
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl p-4 text-white shadow-lg flex flex-col sm:flex-row items-center justify-between mb-6 animate-fade-in-up">
+        {group.callActive && !isVideoCallOpen && (
+        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl p-4 text-white shadow-lg flex flex-col sm:flex-row items-center justify-between mb-6 animate-fade-in-up sticky top-0 z-40">
             <div className="flex items-center gap-4 mb-4 sm:mb-0">
                 <div className="p-3 bg-white/20 rounded-full animate-bounce">
                     <PhoneIncoming className="w-6 h-6 text-white" />
@@ -2041,6 +2057,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                 </button>
             </div>
         </div>
+        )}
 
         <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col md:flex-row justify-between items-center gap-4">
             <div>

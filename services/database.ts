@@ -86,7 +86,9 @@ class DatabaseService {
       status: g.status || 'ACTIVE',
       cycleStartDate: g.cycle_start_date ? new Date(g.cycle_start_date).toISOString() : undefined,
       cycleEndDate: g.cycle_end_date ? new Date(g.cycle_end_date).toISOString() : undefined,
-      scheduledPayoutAmount: Number(g.scheduled_payout_amount || 0)
+      scheduledPayoutAmount: Number(g.scheduled_payout_amount || 0),
+      approvedBy: g.approved_by,
+      callActive: Boolean(g.call_active)
     };
   }
 
@@ -320,7 +322,8 @@ class DatabaseService {
                     welcomeMessage: data.welcomeMessage,
                     icon: data.icon,
                     payoutSchedule: data.payoutSchedule,
-                    scheduledPayoutAmount: data.scheduledPayoutAmount
+                    scheduledPayoutAmount: data.scheduledPayoutAmount,
+                    callActive: data.callActive
                 })
             });
             if (res.ok) {
@@ -338,13 +341,13 @@ class DatabaseService {
     throw new Error("Server is offline. Cannot update group settings.");
   }
 
-  async updateGroupStatus(groupId: string, status: 'ACTIVE' | 'REJECTED'): Promise<Group | null> {
+  async updateGroupStatus(groupId: string, status: 'ACTIVE' | 'REJECTED', approvedBy?: string): Promise<Group | null> {
     if (this.isServerOnline) {
         try {
             const res = await fetch(`${API_BASE}/groups/${groupId}/status`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status })
+                body: JSON.stringify({ status, approvedBy })
             });
             if (res.ok) {
                 await this.syncData();
