@@ -1160,6 +1160,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                 <th className="px-6 py-4">Creator</th>
                                 <th className="px-6 py-4">Amount</th>
                                 <th className="px-6 py-4 text-right">Status</th>
+                                <th className="px-6 py-4 text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-red-100 dark:divide-red-800">
@@ -1170,6 +1171,18 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                     <td className="px-6 py-4">{moneyFormatter(group.contributionAmount, group.currency)}</td>
                                     <td className="px-6 py-4 text-right">
                                         <span className="px-2 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700">REJECTED</span>
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                        <div className="flex justify-end gap-2 items-center">
+                                            <button onClick={() => setGroupActionConfirm({ group, action: 'approve' })} className="p-1 bg-green-100 text-green-700 rounded" title="Approve"><CheckCircle className="w-4 h-4" /></button>
+                                            <button 
+                                                onClick={() => { setCurrentVideoCallGroup(group);  db.updateGroup(group.id, { callActive: true }); }} 
+                                                className="p-1 bg-blue-100 text-blue-700 rounded" 
+                                                title="Start Video Verification"
+                                            >
+                                                <Video className="w-4 h-4" />
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
