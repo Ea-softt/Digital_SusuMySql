@@ -135,6 +135,31 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Ref for group icon upload
   const groupIconInputRef = useRef<HTMLInputElement>(null);
+  const [groupCreators, setGroupCreators] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+      const fetchCreators = async () => {
+          try {
+              const res = await fetch('http://localhost:3001/api/group-memberships');
+              const data = await res.json();
+              if (Array.isArray(data)) {
+                  const creators: Record<string, string> = {};
+                  data.forEach((m: any) => {
+                      if (m.role === 'ADMIN') {
+                          const user = members.find(u => u.id === m.user_id);
+                          if (user) creators[m.group_id] = user.name;
+                      }
+                  });
+                  setGroupCreators(creators);
+              }
+          } catch (e) {
+              console.error("Failed to fetch group creators", e);
+          }
+      };
+      if (groups.length > 0 && members.length > 0) {
+          fetchCreators();
+      }
+  }, [groups, members]);
 
   // Update activeTab when initialTab prop changes (from sidebar navigation)
   const handleGroupAction = async () => {
@@ -146,11 +171,13 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
           await db.updateGroupStatus(group.id, newStatus);
           
           // Notify the creator (Admin)
-          // In a real app, we'd fetch the specific admin of this group. 
-          // For now, we'll assume we can find them in the members list if loaded, or just rely on the status update.
-          const creator = members.find(m => m.role === 'ADMIN' && viewUserGroups.some(g => g.id === group.id)); // Simplified check
+          const res = await fetch('http://localhost:3001/api/group-memberships');
+          const memberships = await res.json();
+          const adminMembership = Array.isArray(memberships) ? memberships.find((m: any) => m.group_id === group.id && m.role === 'ADMIN') : null;
           
-          if (creator) {
+          if (adminMembership) {
+               const creator = members.find(m => m.id === adminMembership.user_id);
+               if (creator) {
                await db.createNotification({
                   id: `notif-group-${Date.now()}`,
                   recipientId: creator.id,
@@ -160,9 +187,11 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                   timestamp: Date.now(),
                   read: false
               });
+               }
           }
 
-          alert(`Group ${action === 'approve' ? 'approved' : 'rejected'} successfully.`);
+          const creatorName = groupCreators[group.id] || 'Unknown';
+          alert(`Group ${action === 'approve' ? 'approved' : 'rejected'} successfully.\nCreator: ${creatorName}`);
           onRefresh();
       } catch (e) {
           console.error(e);
@@ -172,8 +201,9 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
       }
   };
 
- 
- //uptherre
+
+
+
   useEffect(() => {
       setActiveTab(initialTab);
   }, [initialTab]);
@@ -843,7 +873,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                 />
                 <StatsCard
                     title="Active Groups"
-                    value={groups.length.toString()}
+                    value={groups.filter(g => g.status === 'ACTIVE').length.toString()}
                     trend="100% Uptime"
                     trendUp={true}
                     icon={Database}
@@ -1073,12 +1103,10 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                         </thead>
                         <tbody className="divide-y divide-yellow-100 dark:divide-yellow-800">
                             {pendingGroups.map(group => {
-                                // This is a simplification. In a real app, you'd fetch the creator's name.
-                                const creator = members.find(m => m.role === 'ADMIN');
                                 return (
                                     <tr key={group.id}>
                                         <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{group.name}</td>
-                                        <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{creator?.name || 'Unknown Admin'}</td>
+                                        <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{groupCreators[group.id] || 'Unknown Admin'}</td>
                                         <td className="px-6 py-4">{moneyFormatter(group.contributionAmount, group.currency)}</td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex justify-end gap-2">
@@ -1109,7 +1137,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
              </div>
              
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                 {groups.map(group => (
+                 {groups.filter(g => g.status === 'ACTIVE').map(group => (
                      <div key={group.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm p-6 hover:shadow-md transition-shadow">
                          <div className="flex justify-between items-start mb-4">
                              <div className="flex items-center gap-3">
@@ -1231,6 +1259,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
 
     // Calculate Top Groups (Simple mock logic based on total pool for demo as per schema limitations)
     const topGroups = groups
+        .filter(g => g.status === 'ACTIVE')
         .sort((a, b) => b.totalPool - a.totalPool)
         .slice(0, 3)
         .map(g => ({
