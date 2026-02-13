@@ -149,9 +149,7 @@ class DatabaseService {
                   this.groups = Array.isArray(remoteGroups) ? remoteGroups.map((g: any) => this.mapGroup(g)) : [];
               }
 
-              const url = activeGroupId 
-                ? `${API_BASE}/transactions/${userId}?groupId=${activeGroupId}` 
-                : `${API_BASE}/transactions/${userId}`;
+              const url = `${API_BASE}/transactions/${userId}`;
               const txRes = await fetch(url);
               if (txRes.ok) {
                   const remoteTxs = await txRes.json();

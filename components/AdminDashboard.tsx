@@ -375,10 +375,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
     if (!tx) return;
     
     try {
-        // In a real API, we'd have a PATCH /api/transactions/:id
-        // Since the current db service simulates this with addTransaction/syncData,
-        // we update via updateUser logic or similar if needed, or re-add as completed.
-        // For this hybrid, we assume re-sync handles it after the leader clicks.
+        await db.verifyTransaction(txId);
         await db.sendGroupMessage(currentUser, `✅ Contribution of ${moneyFormatter(tx.amount, group.currency)} from ${tx.userName} confirmed.`, group.id);
         await db.createNotification({
             id: `notif-${Date.now()}`,
@@ -402,7 +399,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
     if (!tx) return;
 
     try {
-        // Mock rejection as we don't have a specific backend endpoint for this.
+        await fetch(`http://localhost:3001/api/transactions/${txId}`, { method: 'DELETE' });
         await db.sendGroupMessage(currentUser, `❌ Contribution from ${tx.userName} was rejected.`, group.id);
         await db.createNotification({
             id: `notif-${Date.now()}`,
@@ -1437,10 +1434,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
         });
     };
 
-    const handleReorder = (newOrder: string[]) => {
+    const handleReorder = async (newOrder: string[]) => {
       setPayoutOrder(newOrder);
-      db.updateGroup(group.id, { ...group, payoutSchedule: newOrder });
-      alert("Payout order updated locally. Save settings to persist.");
+      try {
+          await db.updateGroup(group.id, { ...group, payoutSchedule: newOrder });
+          if (onRefresh) onRefresh();
+          alert("Payout order updated.");
+      } catch (e) {
+          console.error("Failed to reorder:", e);
+          alert("Failed to update payout order.");
+      }
     };
 
     const handleRollbackContribution = async (memberId: string) => {
