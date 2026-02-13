@@ -1086,6 +1086,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
 
   const renderGroups = () => {
     const pendingGroups = groups.filter(g => g.status === 'PENDING_VERIFICATION');
+    const rejectedGroups = groups.filter(g => g.status === 'REJECTED');
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -1117,6 +1118,34 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                     </tr>
                                 );
                             })}
+                        </tbody>
+                    </table>
+                </div>
+             )}
+
+             {rejectedGroups.length > 0 && (
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-red-200 dark:border-red-800 overflow-hidden">
+                    <h3 className="font-bold text-lg text-red-800 dark:text-red-200 px-6 py-4 border-b border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20">Rejected Groups</h3>
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300">
+                            <tr>
+                                <th className="px-6 py-4">Group Name</th>
+                                <th className="px-6 py-4">Creator</th>
+                                <th className="px-6 py-4">Amount</th>
+                                <th className="px-6 py-4 text-right">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-red-100 dark:divide-red-800">
+                            {rejectedGroups.map(group => (
+                                <tr key={group.id}>
+                                    <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{group.name}</td>
+                                    <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{groupCreators[group.id] || 'Unknown Admin'}</td>
+                                    <td className="px-6 py-4">{moneyFormatter(group.contributionAmount, group.currency)}</td>
+                                    <td className="px-6 py-4 text-right">
+                                        <span className="px-2 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700">REJECTED</span>
+                                    </td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
                 </div>
