@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { User, Transaction, Group, UserRole, AuditLog } from '../types';
 import { StatsCard } from './StatsCard';
-import { Users as UsersIcon, Shield, Activity, DollarSign, Search, AlertTriangle, CheckCircle, XCircle, Lock, Unlock, Trash2, Server, Database, Settings, ScanFace, BrainCircuit, X, TrendingUp, Download, Upload, AlertOctagon, Globe, PlusCircle, Calendar, Camera, MessageSquare, UserCog, ShieldAlert, ChevronRight, Wallet, ArrowUpRight, FileText, UserPlus, Mail, Loader2, Eye, MapPin, Smartphone, Cpu, Wifi, Phone, History, FileDown, Radar, ArrowLeft, Megaphone, Send, Clock, ShieldCheck, Info } from 'lucide-react';
+import { Users as UsersIcon, Shield, Activity, DollarSign, Search, AlertTriangle, CheckCircle, XCircle, Lock, Unlock, Trash2, Server, Database, Settings, ScanFace, BrainCircuit, X, TrendingUp, Download, Upload, AlertOctagon, Globe, PlusCircle, Calendar, Camera, MessageSquare, UserCog, ShieldAlert, ChevronRight, Wallet, ArrowUpRight, FileText, UserPlus, Mail, Loader2, Eye, MapPin, Smartphone, Cpu, Wifi, Phone, History, FileDown, Radar, ArrowLeft, Megaphone, Send, Clock, ShieldCheck, Info, Video } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { db } from '../services/database';
 import { GroupChat } from './GroupChat';
@@ -136,6 +136,9 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   // Ref for group icon upload
   const groupIconInputRef = useRef<HTMLInputElement>(null);
   const [groupCreators, setGroupCreators] = useState<Record<string, User>>({});
+  const [verifiedCreators, setVerifiedCreators] = useState<Set<string>>(new Set());
+  const [isVideoCallOpen, setIsVideoCallOpen] = useState(false);
+  const [currentVideoCallGroup, setCurrentVideoCallGroup] = useState<Group | null>(null);
 
   useEffect(() => {
       const fetchCreators = async () => {
@@ -1125,7 +1128,17 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                         <td className="px-6 py-4">{moneyFormatter(group.contributionAmount, group.currency)}</td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex justify-end gap-2">
-                                                <button onClick={() => setGroupActionConfirm({ group, action: 'approve' })} className="p-1 bg-green-100 text-green-700 rounded"><CheckCircle className="w-4 h-4" /></button>
+                                                {verifiedCreators.has(group.id) ? (
+                                                    <button onClick={() => setGroupActionConfirm({ group, action: 'approve' })} className="p-1 bg-green-100 text-green-700 rounded" title="Approve"><CheckCircle className="w-4 h-4" /></button>
+                                                ) : (
+                                                    <button 
+                                                        onClick={() => { setCurrentVideoCallGroup(group); setIsVideoCallOpen(true); }} 
+                                                        className="p-1 bg-blue-100 text-blue-700 rounded" 
+                                                        title="Start Video Verification"
+                                                    >
+                                                        <Video className="w-4 h-4" />
+                                                    </button>
+                                                )}
                                                 <button onClick={() => setGroupActionConfirm({ group, action: 'reject' })} className="p-1 bg-red-100 text-red-700 rounded"><XCircle className="w-4 h-4" /></button>
                                             </div>
                                         </td>
@@ -2875,6 +2888,49 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
       );
   };
 
+  const renderVideoCallModal = () => {
+      if (!isVideoCallOpen || !currentVideoCallGroup) return null;
+      const creator = groupCreators[currentVideoCallGroup.id];
+
+      return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+              <div className="bg-gray-900 rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col h-[80vh] border border-gray-800">
+                  {/* Video Area */}
+                  <div className="flex-1 relative bg-black">
+                      {/* Remote Stream (Creator) */}
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                          {creator?.avatar ? (
+                              <img src={creator.avatar} alt={creator.name} className="w-32 h-32 rounded-full border-4 border-gray-700 object-cover mb-4" />
+                          ) : (
+                              <div className="w-32 h-32 rounded-full bg-gray-800 flex items-center justify-center mb-4 border-4 border-gray-700">
+                                  <UsersIcon className="w-16 h-16 text-gray-500" />
+                              </div>
+                          )}
+                          <p className="text-white font-bold text-xl">{creator?.name || 'Group Creator'}</p>
+                          <p className="text-green-500 text-sm animate-pulse mt-2 flex items-center gap-2">
+                              <span className="w-2 h-2 bg-green-500 rounded-full"></span> Live Connection
+                          </p>
+                      </div>
+                      
+                      {/* Local Stream (Admin) */}
+                      <div className="absolute bottom-6 right-6 w-48 h-36 bg-gray-800 rounded-xl border-2 border-gray-700 overflow-hidden shadow-lg">
+                          <div className="w-full h-full flex items-center justify-center bg-gray-900">
+                              <Camera className="w-8 h-8 text-gray-500" />
+                          </div>
+                      </div>
+                  </div>
+
+                  {/* Controls */}
+                  <div className="p-6 bg-gray-800 flex justify-center items-center gap-8 border-t border-gray-700">
+                      <button onClick={() => setIsVideoCallOpen(false)} className="p-4 rounded-full bg-red-600 hover:bg-red-700 text-white transition-colors shadow-lg hover:scale-105 transform duration-200" title="End Call"><Phone className="w-6 h-6 rotate-[135deg]" /></button>
+                      <div className="h-12 w-px bg-gray-700 mx-4"></div>
+                      <button onClick={() => { setVerifiedCreators(prev => new Set(prev).add(currentVideoCallGroup.id)); setIsVideoCallOpen(false); alert(`Identity of ${creator?.name || 'Creator'} Verified via Video Call.`); }} className="px-8 py-3 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold flex items-center gap-2 transition-all shadow-lg hover:scale-105 transform duration-200"><CheckCircle className="w-5 h-5" /> Pass Verification</button>
+                  </div>
+              </div>
+          </div>
+      );
+  };
+
   return (
     <div className="space-y-6">
       {/* Tab Navigation */}
@@ -3049,6 +3105,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
       {renderWithdrawConfirmModal()}
       {renderReactivateModal()}
       {renderGroupActionConfirmModal()}
+      {renderVideoCallModal()}
       
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
