@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { User, Transaction, Group, UserRole, AuditLog } from '../types';
 import { StatsCard } from './StatsCard';
-import { Users, Shield, Activity, DollarSign, Search, AlertTriangle, CheckCircle, XCircle, Lock, Unlock, Trash2, Server, Database, Settings, ScanFace, BrainCircuit, X, TrendingUp, Download, Upload, AlertOctagon, Globe, PlusCircle, Calendar, Camera, MessageSquare, UserCog, ShieldAlert, ChevronRight, Wallet, ArrowUpRight, FileText, UserPlus, Mail, Loader2, Eye, MapPin, Smartphone, Cpu, Wifi, Phone, History, FileDown, Radar, ArrowLeft, Megaphone, Send, Clock, ShieldCheck } from 'lucide-react';
+import { Users as UsersIcon, Shield, Activity, DollarSign, Search, AlertTriangle, CheckCircle, XCircle, Lock, Unlock, Trash2, Server, Database, Settings, ScanFace, BrainCircuit, X, TrendingUp, Download, Upload, AlertOctagon, Globe, PlusCircle, Calendar, Camera, MessageSquare, UserCog, ShieldAlert, ChevronRight, Wallet, ArrowUpRight, FileText, UserPlus, Mail, Loader2, Eye, MapPin, Smartphone, Cpu, Wifi, Phone, History, FileDown, Radar, ArrowLeft, Megaphone, Send, Clock, ShieldCheck, Info } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { db } from '../services/database';
 import { GroupChat } from './GroupChat';
@@ -135,7 +135,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Ref for group icon upload
   const groupIconInputRef = useRef<HTMLInputElement>(null);
-  const [groupCreators, setGroupCreators] = useState<Record<string, string>>({});
+  const [groupCreators, setGroupCreators] = useState<Record<string, User>>({});
 
   useEffect(() => {
       const fetchCreators = async () => {
@@ -143,11 +143,11 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
               const res = await fetch('http://localhost:3001/api/group-memberships');
               const data = await res.json();
               if (Array.isArray(data)) {
-                  const creators: Record<string, string> = {};
+                  const creators: Record<string, User> = {};
                   data.forEach((m: any) => {
                       if (m.role === 'ADMIN') {
                           const user = members.find(u => u.id === m.user_id);
-                          if (user) creators[m.group_id] = user.name;
+                          if (user) creators[m.group_id] = user;
                       }
                   });
                   setGroupCreators(creators);
@@ -190,7 +190,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                }
           }
 
-          const creatorName = groupCreators[group.id] || 'Unknown';
+          const creatorName = groupCreators[group.id]?.name || 'Unknown';
           alert(`Group ${action === 'approve' ? 'approved' : 'rejected'} successfully.\nCreator: ${creatorName}`);
           onRefresh();
       } catch (e) {
@@ -860,7 +860,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                     value={members.length.toString()}
                     trend={`${activeUsers} Active`}
                     trendUp={true}
-                    icon={Users}
+                    icon={UsersIcon}
                     color="bg-blue-600"
                 />
                 <StatsCard
@@ -940,7 +940,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                      }`}>
                                          <div className="shrink-0">
                                             {alert.type === 'VPN' ? <Globe className="w-5 h-5 text-red-600" /> :
-                                             alert.type === 'MULTI_ACCOUNT' ? <Users className="w-5 h-5 text-orange-600" /> :
+                                             alert.type === 'MULTI_ACCOUNT' ? <UsersIcon className="w-5 h-5 text-orange-600" /> :
                                              <ShieldAlert className="w-5 h-5 text-red-600" />}
                                          </div>
                                          <div className="flex-1 min-w-0">
@@ -1085,6 +1085,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   };
 
   const renderGroups = () => {
+    if (!groups) return <div className="p-8 text-center text-gray-500">Loading groups...</div>;
     const pendingGroups = groups.filter(g => g.status === 'PENDING_VERIFICATION');
     const rejectedGroups = groups.filter(g => g.status === 'REJECTED');
 
@@ -1107,7 +1108,20 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                 return (
                                     <tr key={group.id}>
                                         <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{group.name}</td>
-                                        <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{groupCreators[group.id] || 'Unknown Admin'}</td>
+                                        <td className="px-6 py-4 text-gray-600 dark:text-gray-400">
+                                            {groupCreators[group.id] ? (
+                                                <button 
+                                                    onClick={() => setViewUser(groupCreators[group.id])}
+                                                    className="flex items-center gap-2 text-primary-600 hover:text-primary-700 font-medium hover:underline"
+                                                    title="View Creator Profile & History"
+                                                >
+                                                    {groupCreators[group.id].name}
+                                                    <Info className="w-4 h-4" />
+                                                </button>
+                                            ) : (
+                                                'Unknown Admin'
+                                            )}
+                                        </td>
                                         <td className="px-6 py-4">{moneyFormatter(group.contributionAmount, group.currency)}</td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex justify-end gap-2">
@@ -1139,7 +1153,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                             {rejectedGroups.map(group => (
                                 <tr key={group.id}>
                                     <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{group.name}</td>
-                                    <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{groupCreators[group.id] || 'Unknown Admin'}</td>
+                                    <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{groupCreators[group.id]?.name || 'Unknown Admin'}</td>
                                     <td className="px-6 py-4">{moneyFormatter(group.contributionAmount, group.currency)}</td>
                                     <td className="px-6 py-4 text-right">
                                         <span className="px-2 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700">REJECTED</span>
@@ -1171,7 +1185,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                          <div className="flex justify-between items-start mb-4">
                              <div className="flex items-center gap-3">
                                  <div className="w-12 h-12 rounded-lg bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center overflow-hidden">
-                                     {group.icon ? <img src={group.icon} alt="" className="w-full h-full object-cover" /> : <Users className="w-6 h-6 text-primary-600 dark:text-primary-400" />}
+                                     {group.icon ? <img src={group.icon} alt="" className="w-full h-full object-cover" /> : <UsersIcon className="w-6 h-6 text-primary-600 dark:text-primary-400" />}
                                  </div>
                                  <div>
                                      <h4 className="font-bold text-gray-900 dark:text-white">{group.name}</h4>
@@ -2542,7 +2556,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                      {/* Groups Section */}
                      <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-700">
                         <h4 className="font-bold text-lg text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                            <Users className="w-5 h-5 text-primary-600" /> Group Memberships
+                            <UsersIcon className="w-5 h-5 text-primary-600" /> Group Memberships
                         </h4>
                         {viewUserGroups.length > 0 ? (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2867,7 +2881,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
       <div className="flex overflow-x-auto pb-2 border-b border-gray-200 dark:border-gray-700 gap-6">
         {[
             { id: 'overview', label: 'Dashboard', icon: Activity },
-            { id: 'users', label: 'User Management', icon: Users },
+            { id: 'users', label: 'User Management', icon: UsersIcon },
             { id: 'groups', label: 'Groups', icon: Database },
             { id: 'chat', label: 'Group Chat', icon: MessageSquare },
             { id: 'financials', label: 'Platform Financials', icon: DollarSign },
