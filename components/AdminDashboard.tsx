@@ -679,6 +679,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
           message: `Are you sure you want to pay your share of ${moneyFormatter(group.contributionAmount, group.currency)}?`,
           type: 'primary',
           onConfirm: async () => {
+              setConfirmDialog(prev => ({ ...prev, isOpen: false }));
               try {
                   const newTx: Transaction = {
                       id: `t${Date.now()}`,
