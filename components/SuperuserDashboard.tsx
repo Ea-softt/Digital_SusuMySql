@@ -2866,14 +2866,92 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   const renderGroupActionConfirmModal = () => {
       if (!groupActionConfirm) return null;
       const { group, action } = groupActionConfirm;
+      const creator = groupCreators[group.id];
+      
+      // Calculate some stats for the creator
+      const creatorTransactions = transactions.filter(t => t.userId === creator?.id);
+      const totalContributed = creatorTransactions
+        .filter(t => t.type === 'CONTRIBUTION' && t.status === 'COMPLETED')
+        .reduce((sum, t) => sum + t.amount, 0);
+      const totalWithdrawn = creatorTransactions
+        .filter(t => t.type === 'WITHDRAWAL' && t.status === 'COMPLETED')
+        .reduce((sum, t) => sum + t.amount, 0);
+      const totalDeposited = creatorTransactions
+        .filter(t => t.type === 'DEPOSIT' && t.status === 'COMPLETED')
+        .reduce((sum, t) => sum + t.amount, 0);
+      const totalPayouts = creatorTransactions
+        .filter(t => t.type === 'PAYOUT' && t.status === 'COMPLETED')
+        .reduce((sum, t) => sum + t.amount, 0);
+      
+      const walletBalance = totalPayouts + totalDeposited - totalWithdrawn - totalContributed;
       
       return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6 max-w-sm w-full border border-gray-100 dark:border-gray-700 text-center">
+             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6 max-w-2xl w-full border border-gray-100 dark:border-gray-700 text-center max-h-[90vh] overflow-y-auto custom-scrollbar">
                  <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${action === 'approve' ? 'bg-green-100 dark:bg-green-900/30 text-green-600' : 'bg-red-100 dark:bg-red-900/30 text-red-600'}`}>
                      {action === 'approve' ? <CheckCircle className="w-8 h-8" /> : <XCircle className="w-8 h-8" />}
                  </div>
                  <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-2">{action === 'approve' ? 'Approve Group' : 'Reject Group'}</h3>
+                 
+                 {creator && (
+                     <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-4 mb-6 text-left border border-gray-200 dark:border-gray-600">
+                         <h4 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-3 flex items-center gap-2">
+                             <ShieldCheck className="w-4 h-4" /> Creator Verification
+                         </h4>
+                         
+                         <div className="flex items-start gap-4 mb-4">
+                             <img src={creator.avatar} alt={creator.name} className="w-16 h-16 rounded-full border-2 border-white dark:border-gray-600 shadow-sm" />
+                             <div className="flex-1">
+                                 <h4 className="font-bold text-gray-900 dark:text-white text-lg">{creator.name}</h4>
+                                 <p className="text-sm text-gray-500 dark:text-gray-400">{creator.email}</p>
+                                 <div className="flex flex-wrap gap-2 mt-2">
+                                     <span className={`px-2 py-0.5 rounded text-xs font-bold ${creator.verificationStatus === 'VERIFIED' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                         KYC: {creator.verificationStatus}
+                                     </span>
+                                     <span className="px-2 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-700">
+                                         Role: {creator.role}
+                                     </span>
+                                 </div>
+                             </div>
+                         </div>
+
+                         <div className="grid grid-cols-2 gap-4 text-sm mb-4">
+                             <div className="p-2 bg-white dark:bg-gray-800 rounded border border-gray-100 dark:border-gray-600">
+                                 <span className="text-gray-500 dark:text-gray-400 block text-xs">Phone</span>
+                                 <span className="font-medium text-gray-900 dark:text-white">{creator.phoneNumber || 'N/A'}</span>
+                             </div>
+                             <div className="p-2 bg-white dark:bg-gray-800 rounded border border-gray-100 dark:border-gray-600">
+                                 <span className="text-gray-500 dark:text-gray-400 block text-xs">Location</span>
+                                 <span className="font-medium text-gray-900 dark:text-white">{creator.location || 'N/A'}</span>
+                             </div>
+                         </div>
+
+                         <h5 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Financial History</h5>
+                         <div className="grid grid-cols-3 gap-2 text-center mb-2">
+                             <div className="p-2 bg-white dark:bg-gray-800 rounded border border-gray-100 dark:border-gray-600">
+                                 <span className="text-xs text-gray-500 block">Total Contributed</span>
+                                 <span className="font-bold text-green-600 text-sm">{moneyFormatter(totalContributed, group.currency)}</span>
+                             </div>
+                             <div className="p-2 bg-white dark:bg-gray-800 rounded border border-gray-100 dark:border-gray-600">
+                                 <span className="text-xs text-gray-500 block">Total Withdrawn</span>
+                                 <span className="font-bold text-red-600 text-sm">{moneyFormatter(totalWithdrawn, group.currency)}</span>
+                             </div>
+                             <div className="p-2 bg-white dark:bg-gray-800 rounded border border-gray-100 dark:border-gray-600">
+                                 <span className="text-xs text-gray-500 block">Reliability</span>
+                                 <span className="font-bold text-blue-600 text-sm">{creator.reliabilityScore}%</span>
+                             </div>
+                             <div className="p-2 bg-white dark:bg-gray-800 rounded border border-gray-100 dark:border-gray-600">
+                                 <span className="text-xs text-gray-500 block">Total Deposited</span>
+                                 <span className="font-bold text-teal-600 text-sm">{moneyFormatter(totalDeposited, group.currency)}</span>
+                             </div>
+                             <div className="p-2 bg-white dark:bg-gray-800 rounded border border-gray-100 dark:border-gray-600 col-span-2">
+                                 <span className="text-xs text-gray-500 block">Wallet Balance</span>
+                                 <span className="font-bold text-purple-600 text-sm">{moneyFormatter(walletBalance, group.currency)}</span>
+                             </div>
+                         </div>
+                     </div>
+                 )}
+
                  <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">
                      Are you sure you want to {action} <span className="font-bold text-gray-900 dark:text-white">{group.name}</span>?
                      {action === 'approve' ? ' The leader will gain full control.' : ' This action cannot be undone.'}
