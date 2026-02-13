@@ -215,6 +215,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
     setWalletBalance(balance);
   }, [initialMembers, initialTransactions, initialGroup, currentUser.id]);
 
+  if (group.status === 'PENDING_VERIFICATION') {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8 animate-fade-in">
+            <div className="w-24 h-24 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center mb-6">
+                <Clock className="w-12 h-12 text-yellow-600 dark:text-yellow-400" />
+            </div>
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Group Verification Pending</h2>
+            <p className="text-lg text-gray-600 dark:text-gray-300 max-w-md mb-8">
+                Your group <span className="font-bold text-gray-900 dark:text-white">{group.name}</span> has been created and is currently under review by the Superuser. 
+                You will be notified once it is approved and active.
+            </p>
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800 max-w-md">
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                    <strong>Note:</strong> While pending, you cannot invite members or process transactions.
+                </p>
+            </div>
+        </div>
+      );
+  }
+
+  if (group.status === 'REJECTED') {
+       return (
+          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8 animate-fade-in">
+              <div className="w-24 h-24 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mb-6">
+                  <XCircle className="w-12 h-12 text-red-600 dark:text-red-400" />
+              </div>
+              <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Group Rejected</h2>
+              <p className="text-lg text-gray-600 dark:text-gray-300 max-w-md mb-8">
+                  Your group <span className="font-bold text-gray-900 dark:text-white">{group.name}</span> was rejected by the Superuser.
+              </p>
+          </div>
+      );
+  }
+
   const activeMembers = members.filter(m => groupMemberships[m.id] === 'ACTIVE' && m.status !== 'SUSPENDED' && m.role !== UserRole.SUPERUSER);
   const pendingMembers = members.filter(m => groupMemberships[m.id] === 'PENDING' && m.role !== UserRole.SUPERUSER);
   const pendingTransactions = transactions.filter(t => t.status === 'PENDING' && t.type === 'CONTRIBUTION');

@@ -60,7 +60,7 @@ export const JoinGroup: React.FC<JoinGroupProps> = ({ userId, onSuccess, onCance
             currency,
         });
         if (newGroup) {
-            alert(`Group '${newGroup.name}' created successfully!`);
+            alert(`Group '${newGroup.name}' created successfully! It is now pending verification by the Superuser.`);
             onSuccess();
         } else {
             throw new Error("Group creation returned no data.");
