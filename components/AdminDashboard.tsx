@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User, Transaction, Group, UserRole, AuditLog } from '../types';
 import { StatsCard } from './StatsCard';
-import { Users, Shield, Activity, DollarSign, Search, AlertTriangle, CheckCircle, XCircle, Lock, Unlock, Trash2, Server, Database, Settings, ScanFace, BrainCircuit, X, TrendingUp, Download, Upload, AlertOctagon, Globe, PlusCircle, Calendar, Camera, MessageSquare, UserCog, ShieldAlert, ChevronRight, Wallet, ArrowUpRight, FileText, UserPlus, Mail, Loader2, Eye, MapPin, Smartphone, Cpu, Wifi, Phone, History, FileDown, Radar, ArrowLeft, Megaphone, Send, Clock, ShieldCheck, BarChart3, Shuffle, ListOrdered, Check, ArrowUp, ArrowDown, Briefcase, Calendar as CalendarIcon, CreditCard, Zap, PlayCircle, Save, Bell, Percent, User as UserIcon, Copy, RotateCcw } from 'lucide-react';
+import { Users, Shield, Activity, DollarSign, Search, AlertTriangle, CheckCircle, XCircle, Lock, Unlock, Trash2, Server, Database, Settings, ScanFace, BrainCircuit, X, TrendingUp, Download, Upload, AlertOctagon, Globe, PlusCircle, Calendar, Camera, MessageSquare, UserCog, ShieldAlert, ChevronRight, Wallet, ArrowUpRight, FileText, UserPlus, Mail, Loader2, Eye, MapPin, Smartphone, Cpu, Wifi, Phone, History, FileDown, Radar, ArrowLeft, Megaphone, Send, Clock, ShieldCheck, BarChart3, Shuffle, ListOrdered, Check, ArrowUp, ArrowDown, Briefcase, Calendar as CalendarIcon, CreditCard, Zap, PlayCircle, Save, Bell, Percent, User as UserIcon, Copy, RotateCcw, Video, PhoneIncoming } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid, Legend, PieChart, Pie, Cell } from 'recharts';
 import { db } from '../services/database';
 import { GroupChat } from './GroupChat';
@@ -84,6 +84,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   const [currentCyclePayoutHistory, setCurrentCyclePayoutHistory] = useState<Transaction[]>([]);
   const [allTimePayoutHistory, setAllTimePayoutHistory] = useState<Transaction[]>([]);
   const [groupMemberships, setGroupMemberships] = useState<Record<string, string>>({});
+
+  const [isVideoCallOpen, setIsVideoCallOpen] = useState(false);
 
   // --- Transaction Filter & Sort State ---
   const [txSortOrder, setTxSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -215,6 +217,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
     setWalletBalance(balance);
   }, [initialMembers, initialTransactions, initialGroup, currentUser.id]);
 
+  const renderVideoCallModal = () => {
+      if (!isVideoCallOpen) return null;
+      return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-fade-in">
+              <div className="bg-gray-900 rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col h-[80vh] border border-gray-800 relative">
+                  <div className="absolute top-4 left-4 z-10 flex items-center gap-2 bg-black/50 px-3 py-1 rounded-full">
+                      <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                      <span className="text-white text-xs font-bold">LIVE</span>
+                  </div>
+                  <button onClick={() => setIsVideoCallOpen(false)} className="absolute top-4 right-4 z-10 p-2 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors">
+                      <X className="w-6 h-6" />
+                  </button>
+                  
+                  <div className="flex-1 relative bg-black flex items-center justify-center">
+                      <div className="text-center">
+                          <div className="w-32 h-32 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-gray-700 relative">
+                              <UserIcon className="w-16 h-16 text-gray-400" />
+                              <div className="absolute bottom-0 right-0 p-2 bg-green-500 rounded-full border-4 border-gray-800"></div>
+                          </div>
+                          <h3 className="text-3xl font-bold text-white mb-2">Superuser Admin</h3>
+                          <p className="text-gray-400 text-lg">Incoming Video Call...</p>
+                      </div>
+                      
+                      {/* Local Stream Preview */}
+                      <div className="absolute bottom-6 right-6 w-48 h-36 bg-gray-800 rounded-xl border-2 border-gray-700 overflow-hidden shadow-2xl flex items-center justify-center">
+                          <Camera className="w-8 h-8 text-gray-500" />
+                      </div>
+                  </div>
+
+                  <div className="p-8 bg-gray-800 flex justify-center items-center gap-12 border-t border-gray-700">
+                      <button onClick={() => setIsVideoCallOpen(false)} className="p-4 rounded-full bg-red-600 hover:bg-red-700 text-white transition-all shadow-lg hover:scale-110">
+                          <Phone className="w-8 h-8 rotate-[135deg]" />
+                      </button>
+                      <button onClick={() => alert("Call Accepted")} className="p-4 rounded-full bg-green-600 hover:bg-green-700 text-white transition-all shadow-lg hover:scale-110 animate-pulse">
+                          <Phone className="w-8 h-8" />
+                      </button>
+                  </div>
+              </div>
+          </div>
+      );
+  };
+
   if (group.status === 'PENDING_VERIFICATION') {
       return (
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8 animate-fade-in">
@@ -231,6 +275,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                     <strong>Note:</strong> While pending, you cannot invite members or process transactions.
                 </p>
             </div>
+
+            <div className="mt-8 w-full max-w-md animate-fade-in-up">
+                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-lg flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-green-100 dark:bg-green-900/30 rounded-full text-green-600 dark:text-green-400 animate-pulse">
+                            <Video className="w-5 h-5" />
+                        </div>
+                        <div className="text-left">
+                            <h4 className="font-bold text-gray-900 dark:text-white text-sm">Verification Call</h4>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Join call with Superuser</p>
+                        </div>
+                    </div>
+                    <button onClick={() => setIsVideoCallOpen(true)} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-lg transition-colors shadow-md">Join Now</button>
+                </div>
+            </div>
+            {renderVideoCallModal()}
         </div>
       );
   }
@@ -1964,6 +2024,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
 
   return (
     <div className="space-y-6">
+        {/* Incoming Call Alert Banner */}
+        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl p-4 text-white shadow-lg flex flex-col sm:flex-row items-center justify-between mb-6 animate-fade-in-up">
+            <div className="flex items-center gap-4 mb-4 sm:mb-0">
+                <div className="p-3 bg-white/20 rounded-full animate-bounce">
+                    <PhoneIncoming className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                    <h4 className="font-bold text-lg">Incoming Video Call</h4>
+                    <p className="text-indigo-100 text-sm">Superuser is requesting a video verification call.</p>
+                </div>
+            </div>
+            <div className="flex gap-3">
+                <button onClick={() => setIsVideoCallOpen(true)} className="px-6 py-2 bg-white text-indigo-600 hover:bg-indigo-50 font-bold rounded-lg transition-colors shadow-sm flex items-center gap-2">
+                    <Video className="w-4 h-4" /> Answer Call
+                </button>
+            </div>
+        </div>
+
         <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col md:flex-row justify-between items-center gap-4">
             <div>
                 <h2 className="text-xl font-bold text-gray-800 dark:text-white">Group: {group.name}</h2>
@@ -2021,6 +2099,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
         {renderSplitPayoutModal()}
         {viewMember && renderMemberDetailsModal()}
 
+        {renderVideoCallModal()}
         {isHelpCenterOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
                 <div className="bg-gray-50 dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700">

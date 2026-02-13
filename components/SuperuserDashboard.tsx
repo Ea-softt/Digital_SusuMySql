@@ -1128,9 +1128,8 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                         <td className="px-6 py-4">{moneyFormatter(group.contributionAmount, group.currency)}</td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex justify-end gap-2">
-                                                {verifiedCreators.has(group.id) ? (
-                                                    <button onClick={() => setGroupActionConfirm({ group, action: 'approve' })} className="p-1 bg-green-100 text-green-700 rounded" title="Approve"><CheckCircle className="w-4 h-4" /></button>
-                                                ) : (
+                                                <button onClick={() => setGroupActionConfirm({ group, action: 'approve' })} className="p-1 bg-green-100 text-green-700 rounded" title="Approve"><CheckCircle className="w-4 h-4" /></button>
+                                                {!verifiedCreators.has(group.id) && (
                                                     <button 
                                                         onClick={() => { setCurrentVideoCallGroup(group); setIsVideoCallOpen(true); }} 
                                                         className="p-1 bg-blue-100 text-blue-700 rounded" 
