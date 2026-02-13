@@ -105,6 +105,8 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   const [isEditingGroup, setIsEditingGroup] = useState(false);
   const [groupActionConfirm, setGroupActionConfirm] = useState<{ group: Group; action: 'approve' | 'reject' } | null>(null);
   const [groupRejectionReason, setGroupRejectionReason] = useState('');
+  const [groupSearchTerm, setGroupSearchTerm] = useState('');
+  const [allMemberships, setAllMemberships] = useState<any[]>([]);
 
   // Invite User State
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -142,11 +144,12 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   const [currentVideoCallGroup, setCurrentVideoCallGroup] = useState<Group | null>(null);
 
   useEffect(() => {
-      const fetchCreators = async () => {
+      const fetchCreatorsAndMemberships = async () => {
           try {
               const res = await fetch('http://localhost:3001/api/group-memberships');
               const data = await res.json();
               if (Array.isArray(data)) {
+                  setAllMemberships(data);
                   const creators: Record<string, User> = {};
                   data.forEach((m: any) => {
                       if (m.role === 'ADMIN') {
@@ -161,7 +164,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
           }
       };
       if (groups.length > 0 && members.length > 0) {
-          fetchCreators();
+          fetchCreatorsAndMemberships();
       }
   }, [groups, members]);
 
@@ -218,6 +221,20 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
       } finally {
           setGroupActionConfirm(null);
           setGroupRejectionReason('');
+      }
+  };
+
+  const handleSuspendGroup = async (group: Group) => {
+      if (confirm(`Are you sure you want to suspend group "${group.name}"?`)) {
+          await db.updateGroupStatus(group.id, 'SUSPENDED', currentUser.id);
+          onRefresh();
+      }
+  };
+
+  const handleDeleteGroup = async (group: Group) => {
+      if (confirm(`Are you sure you want to DELETE group "${group.name}"? This cannot be undone.`)) {
+          await db.deleteGroup(group.id);
+          onRefresh();
       }
   };
 
@@ -1211,22 +1228,37 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                 </div>
              )}
 
-             <div className="flex justify-between items-center bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
-                <h3 className="font-bold text-gray-900 dark:text-white">Active Saving Groups</h3>
-                <button 
-                    onClick={() => {
-                        setNewGroupForm({ name: '', currency: 'GHS', contributionAmount: '', frequency: 'Monthly', inviteCode: '', welcomeMessage: '', icon: '' });
-                        setIsEditingGroup(false);
-                        setIsCreateGroupOpen(true);
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-sm"
-                >
-                    <PlusCircle className="w-4 h-4" /> Create New Group
-                </button>
+             <div className="flex flex-col md:flex-row justify-between items-center bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm gap-4">
+                <h3 className="font-bold text-gray-900 dark:text-white whitespace-nowrap">Active Saving Groups</h3>
+                <div className="flex items-center gap-3 w-full md:w-auto">
+                    <div className="relative w-full md:w-64">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input 
+                            type="text" 
+                            placeholder="Search groups..." 
+                            value={groupSearchTerm}
+                            onChange={(e) => setGroupSearchTerm(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 dark:text-white"
+                        />
+                    </div>
+                    <button 
+                        onClick={() => {
+                            setNewGroupForm({ name: '', currency: 'GHS', contributionAmount: '', frequency: 'Monthly', inviteCode: '', welcomeMessage: '', icon: '' });
+                            setIsEditingGroup(false);
+                            setIsCreateGroupOpen(true);
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-sm whitespace-nowrap"
+                    >
+                        <PlusCircle className="w-4 h-4" /> Create New
+                    </button>
+                </div>
              </div>
              
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                 {groups.filter(g => g.status === 'ACTIVE').map(group => (
+                 {groups.filter(g => 
+                    (g.status === 'ACTIVE' || g.status === 'SUSPENDED') && 
+                    g.name.toLowerCase().includes(groupSearchTerm.toLowerCase())
+                 ).map(group => (
                      <div key={group.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm p-6 hover:shadow-md transition-shadow">
                          <div className="flex justify-between items-start mb-4">
                              <div className="flex items-center gap-3">
@@ -1235,11 +1267,15 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                  </div>
                                  <div>
                                      <h4 className="font-bold text-gray-900 dark:text-white">{group.name}</h4>
-                                     <p className="text-xs text-gray-500 dark:text-gray-400">ID: {group.id}</p>
+                                     <div className="flex items-center gap-2">
+                                         <p className="text-xs text-gray-500 dark:text-gray-400">ID: {group.id}</p>
+                                         {group.status === 'SUSPENDED' && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 rounded font-bold">SUSPENDED</span>}
+                                     </div>
                                  </div>
                              </div>
                              <div className="flex gap-1">
                                  <button onClick={() => openEditGroup(group)} className="p-1.5 text-gray-400 hover:text-primary-600 transition-colors"><Settings className="w-4 h-4" /></button>
+                                 <button onClick={() => handleDeleteGroup(group)} className="p-1.5 text-gray-400 hover:text-red-600 transition-colors" title="Delete Group"><Trash2 className="w-4 h-4" /></button>
                              </div>
                          </div>
                          
@@ -1265,6 +1301,11 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                          <div className="pt-4 border-t border-gray-100 dark:border-gray-700 flex justify-between items-center">
                              <span className="text-xs font-mono bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-gray-600 dark:text-gray-300">{group.inviteCode}</span>
                              <button onClick={() => setViewGroup(group)} className="text-sm text-primary-600 hover:text-primary-700 font-medium">View Details</button>
+                             {group.status === 'ACTIVE' ? (
+                                 <button onClick={() => handleSuspendGroup(group)} className="text-xs text-red-500 hover:text-red-700 font-bold border border-red-200 px-2 py-1 rounded">Suspend</button>
+                             ) : (
+                                 <button onClick={() => db.updateGroupStatus(group.id, 'ACTIVE', currentUser.id).then(onRefresh)} className="text-xs text-green-500 hover:text-green-700 font-bold border border-green-200 px-2 py-1 rounded">Activate</button>
+                             )}
                          </div>
                      </div>
                  ))}
@@ -2114,9 +2155,11 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
 
   const renderGroupDetailsModal = () => {
     if (!viewGroup || isEditingGroup) return null; // Logic to hide if in edit mode is handled by state management
+    const groupMembers = allMemberships.filter(m => m.group_id === viewGroup.id);
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full border border-gray-100 dark:border-gray-700 overflow-hidden">
+             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full border border-gray-100 dark:border-gray-700 overflow-hidden flex flex-col max-h-[90vh]">
                  <div className="relative h-24 bg-primary-600">
                      <button onClick={() => setViewGroup(null)} className="absolute top-4 right-4 p-1 bg-black/20 text-white rounded-full hover:bg-black/30 transition-colors">
                         <X className="w-5 h-5" />
@@ -2128,7 +2171,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                      </div>
                  </div>
                  
-                 <div className="pt-12 px-6 pb-6">
+                 <div className="pt-12 px-6 pb-6 overflow-y-auto">
                      <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-1">{viewGroup.name}</h3>
                      <div className="flex items-center gap-2 mb-4">
                          <span className="bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 px-2 py-0.5 rounded text-xs font-mono font-bold">{viewGroup.inviteCode}</span>
@@ -2159,6 +2202,42 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                          <p className="text-sm text-gray-600 dark:text-gray-400 italic bg-gray-50 dark:bg-gray-700/30 p-3 rounded-lg border border-gray-100 dark:border-gray-600">
                              "{viewGroup.welcomeMessage || 'No message set.'}"
                          </p>
+                     </div>
+
+                     <div className="mt-6">
+                         <h4 className="font-bold text-gray-900 dark:text-white text-sm mb-3 flex items-center gap-2">
+                             <UsersIcon className="w-4 h-4" /> Group Members ({groupMembers.length})
+                         </h4>
+                         <div className="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden max-h-60 overflow-y-auto">
+                             <table className="w-full text-left text-xs">
+                                 <thead className="bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+                                     <tr>
+                                         <th className="px-3 py-2">Name</th>
+                                         <th className="px-3 py-2">Role</th>
+                                         <th className="px-3 py-2 text-right">Status</th>
+                                     </tr>
+                                 </thead>
+                                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                     {groupMembers.map(m => {
+                                         const user = members.find(u => u.id === m.user_id);
+                                         return (
+                                             <tr key={m.user_id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                                 <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">{user?.name || 'Unknown'}</td>
+                                                 <td className="px-3 py-2 text-gray-500 dark:text-gray-400">{m.role}</td>
+                                                 <td className="px-3 py-2 text-right">
+                                                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                                         m.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 
+                                                         m.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' : 
+                                                         'bg-red-100 text-red-700'
+                                                     }`}>{m.status}</span>
+                                                 </td>
+                                             </tr>
+                                         );
+                                     })}
+                                     {groupMembers.length === 0 && <tr><td colSpan={3} className="p-4 text-center text-gray-500">No members found.</td></tr>}
+                                 </tbody>
+                             </table>
+                         </div>
                      </div>
 
                      <div className="mt-6 flex gap-3">

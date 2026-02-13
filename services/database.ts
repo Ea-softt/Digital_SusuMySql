@@ -339,7 +339,7 @@ class DatabaseService {
     throw new Error("Server is offline. Cannot update group settings.");
   }
 
-  async updateGroupStatus(groupId: string, status: 'ACTIVE' | 'REJECTED', approvedBy?: string): Promise<Group | null> {
+  async updateGroupStatus(groupId: string, status: 'ACTIVE' | 'REJECTED' | 'SUSPENDED', approvedBy?: string): Promise<Group | null> {
     if (this.isServerOnline) {
         try {
             const res = await fetch(`${API_BASE}/groups/${groupId}/status`, {

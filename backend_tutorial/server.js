@@ -103,7 +103,9 @@ async function initializeDatabase() {
         // Add status column to savings_groups for approval workflow
         const [sgStatus] = await connection.query(`SHOW COLUMNS FROM savings_groups LIKE 'status'`);
         if (sgStatus.length === 0) {
-            await connection.query(`ALTER TABLE savings_groups ADD COLUMN status ENUM('ACTIVE', 'PENDING_VERIFICATION', 'REJECTED') DEFAULT 'ACTIVE'`);
+            await connection.query(`ALTER TABLE savings_groups ADD COLUMN status ENUM('ACTIVE', 'PENDING_VERIFICATION', 'REJECTED', 'SUSPENDED') DEFAULT 'ACTIVE'`);
+        } else {
+            await connection.query(`ALTER TABLE savings_groups MODIFY COLUMN status ENUM('ACTIVE', 'PENDING_VERIFICATION', 'REJECTED', 'SUSPENDED') DEFAULT 'ACTIVE'`);
         }
 
         // Add approved_by column to savings_groups
@@ -299,7 +301,7 @@ app.put('/api/groups/:id', async (req, res) => {
 
 app.put('/api/groups/:id/status', async (req, res) => {
     const { status, approvedBy } = req.body;
-    if (!['ACTIVE', 'REJECTED', 'PENDING_VERIFICATION'].includes(status)) {
+    if (!['ACTIVE', 'REJECTED', 'PENDING_VERIFICATION', 'SUSPENDED'].includes(status)) {
         return res.status(400).json({ error: 'Invalid status' });
     }
     try {
