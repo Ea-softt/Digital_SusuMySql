@@ -217,21 +217,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
     setWalletBalance(balance);
   }, [initialMembers, initialTransactions, initialGroup, currentUser.id]);
 
-  // Poll for call status to auto-close modal when Superuser ends call
-  useEffect(() => {
-      let interval: NodeJS.Timeout;
-      if (isVideoCallOpen && group.id) {
-          interval = setInterval(async () => {
-              await db.syncData(currentUser.id);
-              const updatedGroup = db.getGroups().find(g => g.id === group.id);
-              if (updatedGroup && !updatedGroup.callActive) {
-                  setIsVideoCallOpen(false);
-              }
-          }, 2000);
-      }
-      return () => clearInterval(interval);
-  }, [isVideoCallOpen, group.id, currentUser.id]);
-
   const renderVideoCallModal = () => {
       if (!isVideoCallOpen) return null;
       return (
@@ -251,7 +236,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                               <UserIcon className="w-16 h-16 text-gray-400" />
                               <div className="absolute bottom-0 right-0 p-2 bg-green-500 rounded-full border-4 border-gray-800"></div>
                           </div>
-                          <h3 className="text-3xl font-bold text-white mb-2">Superuser Admin</h3>
+                          <h3 className="text-3xl font-bold text-white mb-2">Superuser</h3>
                           <p className="text-gray-400 text-lg">Incoming Video Call...</p>
                       </div>
                       
@@ -2040,8 +2025,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
   return (
     <div className="space-y-6">
         {/* Incoming Call Alert Banner */}
-        {group.callActive && !isVideoCallOpen && (
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl p-4 text-white shadow-lg flex flex-col sm:flex-row items-center justify-between mb-6 animate-fade-in-up sticky top-0 z-40">
+        {group.callActive && !isVideoCallOpen && ( <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl p-4 text-white shadow-lg flex flex-col sm:flex-row items-center justify-between mb-6 animate-fade-in-up sticky top-0 z-40">
             <div className="flex items-center gap-4 mb-4 sm:mb-0">
                 <div className="p-3 bg-white/20 rounded-full animate-bounce">
                     <PhoneIncoming className="w-6 h-6 text-white" />

@@ -1132,7 +1132,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                                 <button onClick={() => setGroupActionConfirm({ group, action: 'approve' })} className="p-1 bg-green-100 text-green-700 rounded" title="Approve"><CheckCircle className="w-4 h-4" /></button>
                                                 {!verifiedCreators.has(group.id) && (
                                                     <button 
-                                                        onClick={() => { setCurrentVideoCallGroup(group); setIsVideoCallOpen(true); db.updateGroup(group.id, { callActive: true }); }} 
+                                                        onClick={() => { setCurrentVideoCallGroup(group);  db.updateGroup(group.id, { callActive: true }); }} 
                                                         className="p-1 bg-blue-100 text-blue-700 rounded" 
                                                         title="Start Video Verification"
                                                     >
