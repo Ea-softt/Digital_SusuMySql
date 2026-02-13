@@ -104,6 +104,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   });
   const [isEditingGroup, setIsEditingGroup] = useState(false);
   const [groupActionConfirm, setGroupActionConfirm] = useState<{ group: Group; action: 'approve' | 'reject' } | null>(null);
+  const [groupRejectionReason, setGroupRejectionReason] = useState('');
 
   // Invite User State
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -168,11 +169,23 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   const handleGroupAction = async () => {
       if (!groupActionConfirm) return;
       const { group, action } = groupActionConfirm;
+
+      if (action === 'reject' && !groupRejectionReason.trim()) {
+          alert("Please provide a reason for rejection.");
+          return;
+      }
+
       const newStatus = action === 'approve' ? 'ACTIVE' : 'REJECTED';
       
       try {
          // await db.updateGroupStatus(group.id, newStatus);
           await db.updateGroupStatus(group.id, newStatus, currentUser.id);
+
+          if (action === 'reject') {
+              addLog(group.name, 'REJECTED', groupRejectionReason);
+          } else {
+              addLog(group.name, 'VERIFIED', 'Group Approved');
+          }
           
           // Notify the creator (Admin)
           const res = await fetch('http://localhost:3001/api/group-memberships');
@@ -186,7 +199,9 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                   id: `notif-group-${Date.now()}`,
                   recipientId: creator.id,
                   title: `Group ${action === 'approve' ? 'Approved' : 'Rejected'}`,
-                  message: action === 'approve' ? `Your group "${group.name}" has been approved and is now active.` : `Your group "${group.name}" has been rejected.`,
+                  message: action === 'approve' 
+                    ? `Your group "${group.name}" has been approved and is now active.` 
+                    : `Your group "${group.name}" has been rejected. Reason: ${groupRejectionReason}`,
                   type: action === 'approve' ? 'success' : 'error',
                   timestamp: Date.now(),
                   read: false
@@ -202,6 +217,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
           alert("Failed to update group status.");
       } finally {
           setGroupActionConfirm(null);
+          setGroupRejectionReason('');
       }
   };
 
@@ -1159,6 +1175,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                 <th className="px-6 py-4">Group Name</th>
                                 <th className="px-6 py-4">Creator</th>
                                 <th className="px-6 py-4">Amount</th>
+                                <th className="px-6 py-4">Reason</th>
                                 <th className="px-6 py-4 text-right">Status</th>
                                 <th className="px-6 py-4 text-right">Actions</th>
                             </tr>
@@ -1169,6 +1186,9 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                     <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{group.name}</td>
                                     <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{groupCreators[group.id]?.name || 'Unknown Admin'}</td>
                                     <td className="px-6 py-4">{moneyFormatter(group.contributionAmount, group.currency)}</td>
+                                    <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
+                                        {logs.find(l => l.action === 'REJECTED' && l.user === group.name)?.reason || 'Policy Violation'}
+                                    </td>
                                     <td className="px-6 py-4 text-right">
                                         <span className="px-2 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700">REJECTED</span>
                                     </td>
@@ -1176,7 +1196,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                         <div className="flex justify-end gap-2 items-center">
                                             <button onClick={() => setGroupActionConfirm({ group, action: 'approve' })} className="p-1 bg-green-100 text-green-700 rounded" title="Approve"><CheckCircle className="w-4 h-4" /></button>
                                             <button 
-                                                onClick={() => { setCurrentVideoCallGroup(group);  db.updateGroup(group.id, { callActive: true }); }} 
+                                                onClick={() => { setCurrentVideoCallGroup(group); setIsVideoCallOpen(true); db.updateGroup(group.id, { callActive: true }); }} 
                                                 className="p-1 bg-blue-100 text-blue-700 rounded" 
                                                 title="Start Video Verification"
                                             >
@@ -2970,8 +2990,22 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                      Are you sure you want to {action} <span className="font-bold text-gray-900 dark:text-white">{group.name}</span>?
                      {action === 'approve' ? ' The leader will gain full control.' : ' This action cannot be undone.'}
                  </p>
+                 
+                 {action === 'reject' && (
+                     <div className="mb-6 text-left">
+                         <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Rejection Reason</label>
+                         <textarea
+                             value={groupRejectionReason}
+                             onChange={(e) => setGroupRejectionReason(e.target.value)}
+                             placeholder="Why is this group being rejected?"
+                             className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-red-500 outline-none"
+                             rows={3}
+                         />
+                     </div>
+                 )}
+
                  <div className="flex gap-3">
-                     <button onClick={() => setGroupActionConfirm(null)} className="flex-1 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg font-medium text-gray-700 dark:text-gray-300">Cancel</button>
+                     <button onClick={() => { setGroupActionConfirm(null); setGroupRejectionReason(''); }} className="flex-1 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg font-medium text-gray-700 dark:text-gray-300">Cancel</button>
                      <button onClick={handleGroupAction} className={`flex-1 py-2 text-white rounded-lg font-bold ${action === 'approve' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>Confirm</button>
                  </div>
              </div>
