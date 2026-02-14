@@ -259,6 +259,374 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
       );
   };
 
+  const handleLoadWallet = async () => {
+      if (!momoDetails.amount) {
+          alert('Please enter an amount.');
+          return;
+      }
+
+      if (!currentUser.phoneNumber) {
+          alert('Please add a phone number to your profile first.');
+          return;
+      }
+
+      setIsProcessingWallet(true);
+      try {
+          const amount = Number(momoDetails.amount);
+          const phoneNumber = currentUser.phoneNumber;
+
+          // Validate the mobile money transaction
+          const validation = validateMobileMoneyTransaction(
+              momoDetails.provider as any,
+              phoneNumber,
+              amount
+          );
+
+          if (!validation.valid) {
+              alert(`Validation failed:\n${validation.errors.join('\n')}`);
+              setIsProcessingWallet(false);
+              return;
+          }
+
+          // Process Ghana Mobile Money Payment
+          const paymentResult = await processGhanaMobileMoneyPayment(
+              momoDetails.provider as any,
+              phoneNumber,
+              amount,
+              group.currency
+          );
+
+          if (!paymentResult.success) {
+              alert(`Payment Failed: ${paymentResult.error || paymentResult.message}`);
+              setIsProcessingWallet(false);
+              return;
+          }
+
+          // Create transaction record
+          const newTx: Transaction = {
+              id: paymentResult.transactionId || `tx-d-${Date.now()}`,
+              userId: currentUser.id,
+              userName: currentUser.name,
+              type: 'DEPOSIT',
+              amount: amount,
+              date: new Date().toISOString().split('T')[0],
+              status: 'PENDING' // Mobile Money transactions are initially pending
+          };
+
+          await db.addTransaction(newTx);
+          if (onRefresh) onRefresh();
+          setWalletModalOpen(false);
+          setMomoDetails(prev => ({ ...prev, amount: '' }));
+
+          alert(`Payment Initiated!\n\n${paymentResult.message}\n\nTransaction ID: ${paymentResult.transactionId}`);
+      } catch (err) {
+          alert(`Payment failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      } finally {
+          setIsProcessingWallet(false);
+      }
+  };
+
+  const handleRequestWithdrawal = async () => {
+      if (!withdrawRequestAmount) {
+          alert('Please enter an amount.');
+          return;
+      }
+      
+      const amount = Number(withdrawRequestAmount);
+      if (isNaN(amount) || amount <= 0) {
+          alert('Please enter a valid amount greater than zero.');
+          return;
+      }
+
+      if (amount > walletBalance) {
+          alert(`Insufficient wallet balance. Available: ${moneyFormatter(walletBalance, group.currency)}`);
+          return;
+      }
+
+      // Security: Ensure phone number is present and valid from profile (not user input)
+      if (!currentUser.phoneNumber) {
+          alert('No registered phone number found. Please update your profile settings first.');
+          return;
+      }
+
+      setIsRequestingWithdrawal(true);
+      try {
+          // Security: Create transaction with PENDING status.
+          // Backend/Superuser must approve this before actual money movement.
+          const newTx: Transaction = {
+              id: `tx-w-req-${Date.now()}`,
+              userId: currentUser.id,
+              userName: currentUser.name,
+              type: 'WITHDRAWAL',
+              amount: amount,
+              date: new Date().toISOString().split('T')[0],
+              status: 'PENDING' // Enforce approval workflow
+          };
+
+          await db.addTransaction(newTx);
+          // Notify Superuser of withdrawal request
+          const superuser = members.find(m => m.role === UserRole.SUPERUSER);
+          if (superuser) {
+              await db.createNotification({
+                  id: `notif-wd-req-${Date.now()}`, recipientId: superuser.id,
+                  title: 'Withdrawal Request',
+                  message: `${currentUser.name} has requested to withdraw ${moneyFormatter(amount, group.currency)}.`,
+                  type: 'warning', timestamp: Date.now(), read: false
+              });
+          }
+          
+          if (onRefresh) onRefresh();
+          setWithdrawModalOpen(false);
+          setWithdrawRequestAmount('');
+          alert("Withdrawal request submitted successfully. Waiting for Superuser approval.");
+      } catch (err) {
+          alert("Failed to submit withdrawal request.");
+      } finally {
+          setIsRequestingWithdrawal(false);
+      }
+  };
+
+  const renderWalletModal = () => {
+    if (!walletModalOpen) return null;
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 border border-gray-100 dark:border-gray-700">
+                <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">Load Leader Wallet</h3>
+                    <button onClick={() => setWalletModalOpen(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+                </div>
+
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Mobile Money Provider</label>
+                        <div className="grid grid-cols-3 gap-2">
+                            {['MTN', 'Vodafone', 'AirtelTigo'].map((provider) => (
+                                <button
+                                    key={provider}
+                                    onClick={() => setMomoDetails(prev => ({...prev, provider}))}
+                                    className={`py-2.5 rounded-lg border text-sm font-bold transition-all ${
+                                        momoDetails.provider === provider
+                                            ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-500 text-primary-700 dark:text-primary-400 ring-1 ring-primary-500'
+                                            : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                    }`}
+                                >
+                                    {provider}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Registered Phone Number</label>
+                        <div className="relative">
+                            <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <div className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700/50 text-gray-900 dark:text-white font-mono flex items-center justify-between">
+                                <span>{normalizePhoneNumber(currentUser.phoneNumber || 'Not set')}</span>
+                                <span className="text-[10px] font-bold uppercase text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600 px-2 py-1 rounded">Verified</span>
+                            </div>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Your registered mobile money account</p>
+                    </div>
+
+                    <div>
+                        <div className="flex items-center justify-between">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount (GHS)</label>
+                            <button
+                                type="button"
+                                onClick={() => setMomoDetails(prev => ({ ...prev, amount: String(group.contributionAmount) }))}
+                                className="text-sm text-primary-600 hover:underline"
+                            >
+                                Use contribution: {moneyFormatter(group.contributionAmount, group.currency)}
+                            </button>
+                        </div>
+                        <div className="relative">
+                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <input
+                                type="number"
+                                placeholder="0.00"
+                                value={momoDetails.amount}
+                                onChange={(e) => setMomoDetails(prev => ({...prev, amount: e.target.value}))}
+                                min="1"
+                                max="10000"
+                                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                            />
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Min: GHS 1 | Max: GHS 10,000</p>
+                    </div>
+
+                    <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-300">
+                        You will receive a USSD prompt on your phone to complete the payment.
+                    </div>
+
+                    <div className="flex gap-3">
+                        <button
+                            onClick={() => setWalletModalOpen(false)}
+                            className="flex-1 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-bold transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleLoadWallet}
+                            disabled={isProcessingWallet || !momoDetails.amount || !currentUser.phoneNumber}
+                            className="flex-1 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg font-bold transition-colors flex items-center justify-center gap-2"
+                        >
+                            {isProcessingWallet ? <Loader2 className="w-4 h-4 animate-spin" /> : <Smartphone className="w-4 h-4" />}
+                            Load Wallet
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+  };
+
+  const renderWithdrawModal = () => {
+    if (!withdrawModalOpen) return null;
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 border border-gray-100 dark:border-gray-700">
+                <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">Request Withdrawal</h3>
+                    <button onClick={() => setWithdrawModalOpen(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+                </div>
+
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Registered MoMo Number</label>
+                        <div className="relative">
+                            <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <input 
+                                type="text" 
+                                value={currentUser.phoneNumber || 'No number set'} 
+                                disabled 
+                                readOnly 
+                                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 font-mono cursor-not-allowed"
+                            />
+                            <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Withdrawals are restricted to your registered profile number for security.
+                        </p>
+                    </div>
+
+                    <div>
+                        <div className="flex items-center justify-between">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Amount ({group.currency})</label>
+                            <span className="text-xs text-gray-500">Max: {moneyFormatter(walletBalance, group.currency)}</span>
+                        </div>
+                        <div className="relative">
+                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <input
+                                type="number"
+                                placeholder="0.00"
+                                value={withdrawRequestAmount}
+                                onChange={(e) => setWithdrawRequestAmount(e.target.value)}
+                                min="1"
+                                max={walletBalance}
+                                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex gap-3 pt-2">
+                        <button
+                            onClick={() => setWithdrawModalOpen(false)}
+                            className="flex-1 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-bold transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleRequestWithdrawal}
+                            disabled={isRequestingWithdrawal || !withdrawRequestAmount || Number(withdrawRequestAmount) > walletBalance}
+                            className="flex-1 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg font-bold transition-colors flex items-center justify-center gap-2"
+                        >
+                            {isRequestingWithdrawal ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUpRight className="w-4 h-4" />}
+                            Request
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+  };
+
+  const renderConfirmDialog = () => {
+    if (!confirmDialog.isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 border">
+                <h3 className="text-lg font-bold mb-2">{confirmDialog.title}</h3>
+                <p className="text-gray-600 mb-6">{confirmDialog.message}</p>
+                <div className="flex justify-end gap-3">
+                    <button onClick={() => setConfirmDialog({...confirmDialog, isOpen: false})} className="px-4 py-2">Cancel</button>
+                    <button onClick={confirmDialog.onConfirm} className={`px-4 py-2 text-white rounded-lg font-bold ${confirmDialog.type === 'danger' ? 'bg-red-600' : 'bg-primary-600'}`}>Confirm</button>
+                </div>
+            </div>
+        </div>
+    );
+  };
+
+  if (group.status === 'SUSPENDED') {
+    const adminPersonalTransactions = transactions.filter(tx =>
+     tx.userId === currentUser.id &&
+     tx.type !== 'CONTRIBUTION'
+    ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    return (
+       <div className="space-y-6 animate-fade-in p-6">
+           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 text-center">
+               <ShieldAlert className="w-12 h-12 text-red-600 mx-auto mb-4" />
+               <h2 className="text-2xl font-bold text-red-800 dark:text-red-200 mb-2">Group Suspended</h2>
+               <p className="text-red-600 dark:text-red-300 max-w-md mx-auto">
+                   This group has been suspended. Access is restricted to wallet functions only.
+               </p>
+           </div>
+           
+           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-100 dark:border-gray-700 shadow-sm">
+             <div className="flex items-center gap-3 mb-2">
+                 <Wallet className="w-6 h-6 text-green-500" />
+                 <h4 className="text-lg font-bold text-gray-800 dark:text-white">Group Leader Wallet</h4>
+             </div>
+             <p className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{moneyFormatter(walletBalance, group.currency)}</p>
+             <div className="mt-4 flex flex-col sm:flex-row gap-3">
+                  <button onClick={() => setWalletModalOpen(true)} className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg font-bold flex items-center justify-center gap-2"><Smartphone className="w-4 h-4" /> Load Wallet</button>
+                  <button onClick={() => setWithdrawModalOpen(true)} className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg font-bold flex items-center justify-center gap-2"><ArrowUpRight className="w-4 h-4" /> Withdraw</button>
+             </div>
+         </div>
+
+         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border overflow-hidden mt-8">
+           <h3 className="font-bold text-lg text-gray-900 dark:text-white px-6 py-4 border-b border-gray-100 dark:border-gray-700">Administrator's Personal Transactions</h3>
+           <table className="w-full text-left text-sm">
+               <thead className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                   <tr>
+                       <th className="px-6 py-4">Date</th>
+                       <th className="px-6 py-4">Type</th>
+                       <th className="px-6 py-4">Amount</th>
+                       <th className="px-6 py-4">Status</th>
+                   </tr>
+               </thead>
+               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                   {adminPersonalTransactions.length > 0 ? adminPersonalTransactions.map(tx => (
+                       <tr key={tx.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                           <td className="px-6 py-4">{new Date(tx.date).toLocaleDateString()}</td>
+                           <td className="px-6 py-4"><span className="px-2 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-700">{tx.type}</span></td>
+                           <td className="px-6 py-4 font-bold">{moneyFormatter(tx.amount, group.currency)}</td>
+                           <td className="px-6 py-4"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tx.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{tx.status}</span></td>
+                       </tr>
+                   )) : (
+                     <tr><td colSpan={4} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">No personal transactions found.</td></tr>
+                   )}
+               </tbody>
+           </table>
+         </div>
+
+         {renderWalletModal()}
+         {renderWithdrawModal()}
+         {renderConfirmDialog()}
+       </div>
+    );
+  }
+
   if (group.status === 'PENDING_VERIFICATION') {
       return (
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8 animate-fade-in">
@@ -529,139 +897,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
     } finally {
       setIsStartingNewCycle(false);
     }
-  };
-
-  const handleLoadWallet = async () => {
-      if (!momoDetails.amount) {
-          alert('Please enter an amount.');
-          return;
-      }
-
-      if (!currentUser.phoneNumber) {
-          alert('Please add a phone number to your profile first.');
-          return;
-      }
-
-      setIsProcessingWallet(true);
-      try {
-          const amount = Number(momoDetails.amount);
-          const phoneNumber = currentUser.phoneNumber;
-
-          // Validate the mobile money transaction
-          const validation = validateMobileMoneyTransaction(
-              momoDetails.provider as any,
-              phoneNumber,
-              amount
-          );
-
-          if (!validation.valid) {
-              alert(`Validation failed:\n${validation.errors.join('\n')}`);
-              setIsProcessingWallet(false);
-              return;
-          }
-
-          // Process Ghana Mobile Money Payment
-          const paymentResult = await processGhanaMobileMoneyPayment(
-              momoDetails.provider as any,
-              phoneNumber,
-              amount,
-              group.currency
-          );
-
-          if (!paymentResult.success) {
-              alert(`Payment Failed: ${paymentResult.error || paymentResult.message}`);
-              setIsProcessingWallet(false);
-              return;
-          }
-
-          // Create transaction record
-          const newTx: Transaction = {
-              id: paymentResult.transactionId || `tx-d-${Date.now()}`,
-              userId: currentUser.id,
-              userName: currentUser.name,
-              type: 'DEPOSIT',
-              amount: amount,
-              date: new Date().toISOString().split('T')[0],
-              status: 'PENDING' // Mobile Money transactions are initially pending
-          };
-
-          await db.addTransaction(newTx);
-          if (onRefresh) onRefresh();
-          setWalletModalOpen(false);
-          setMomoDetails(prev => ({ ...prev, amount: '' }));
-
-          alert(`Payment Initiated!\n\n${paymentResult.message}\n\nTransaction ID: ${paymentResult.transactionId}`);
-      } catch (err) {
-          alert(`Payment failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-      } finally {
-          setIsProcessingWallet(false);
-      }
-  };
-
-  // --- SECURE WITHDRAWAL LOGIC ---
-  // Backend Requirement: 
-  // 1. Validate wallet balance on server.
-  // 2. Use registered phone number from DB (never trust client input for destination).
-  // 3. Create transaction with status 'PENDING'.
-  // 4. Notify Superuser for approval.
-  const handleRequestWithdrawal = async () => {
-      if (!withdrawRequestAmount) {
-          alert('Please enter an amount.');
-          return;
-      }
-      
-      const amount = Number(withdrawRequestAmount);
-      if (isNaN(amount) || amount <= 0) {
-          alert('Please enter a valid amount greater than zero.');
-          return;
-      }
-
-      if (amount > walletBalance) {
-          alert(`Insufficient wallet balance. Available: ${moneyFormatter(walletBalance, group.currency)}`);
-          return;
-      }
-
-      // Security: Ensure phone number is present and valid from profile (not user input)
-      if (!currentUser.phoneNumber) {
-          alert('No registered phone number found. Please update your profile settings first.');
-          return;
-      }
-
-      setIsRequestingWithdrawal(true);
-      try {
-          // Security: Create transaction with PENDING status.
-          // Backend/Superuser must approve this before actual money movement.
-          const newTx: Transaction = {
-              id: `tx-w-req-${Date.now()}`,
-              userId: currentUser.id,
-              userName: currentUser.name,
-              type: 'WITHDRAWAL',
-              amount: amount,
-              date: new Date().toISOString().split('T')[0],
-              status: 'PENDING' // Enforce approval workflow
-          };
-
-          await db.addTransaction(newTx);
-          // Notify Superuser of withdrawal request
-          const superuser = members.find(m => m.role === UserRole.SUPERUSER);
-          if (superuser) {
-              await db.createNotification({
-                  id: `notif-wd-req-${Date.now()}`, recipientId: superuser.id,
-                  title: 'Withdrawal Request',
-                  message: `${currentUser.name} has requested to withdraw ${moneyFormatter(amount, group.currency)}.`,
-                  type: 'warning', timestamp: Date.now(), read: false
-              });
-          }
-          
-          if (onRefresh) onRefresh();
-          setWithdrawModalOpen(false);
-          setWithdrawRequestAmount('');
-          alert("Withdrawal request submitted successfully. Waiting for Superuser approval.");
-      } catch (err) {
-          alert("Failed to submit withdrawal request.");
-      } finally {
-          setIsRequestingWithdrawal(false);
-      }
   };
 
   const handleAdminContribution = async () => {
@@ -2140,202 +2375,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
             </div>
         )}
 
-        {walletModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 border border-gray-100 dark:border-gray-700">
-                    <div className="flex items-center justify-between mb-6">
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">Load Leader Wallet</h3>
-                        <button onClick={() => setWalletModalOpen(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
-                    </div>
-
-                    <div className="space-y-4">
-                        {/* Provider Selection */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Mobile Money Provider</label>
-                            <div className="grid grid-cols-3 gap-2">
-                                {['MTN', 'Vodafone', 'AirtelTigo'].map((provider) => (
-                                    <button
-                                        key={provider}
-                                        onClick={() => setMomoDetails(prev => ({...prev, provider}))}
-                                        className={`py-2.5 rounded-lg border text-sm font-bold transition-all ${
-                                            momoDetails.provider === provider
-                                                ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-500 text-primary-700 dark:text-primary-400 ring-1 ring-primary-500'
-                                                : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-                                        }`}
-                                    >
-                                        {provider}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Phone Number Display */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Registered Phone Number</label>
-                            <div className="relative">
-                                <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                <div className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700/50 text-gray-900 dark:text-white font-mono flex items-center justify-between">
-                                    <span>{normalizePhoneNumber(currentUser.phoneNumber || 'Not set')}</span>
-                                    <span className="text-[10px] font-bold uppercase text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600 px-2 py-1 rounded">Verified</span>
-                                </div>
-                            </div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Your registered mobile money account</p>
-                        </div>
-
-                        {/* Amount Input */}
-                        <div>
-                            <div className="flex items-center justify-between">
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Amount (GHS)</label>
-                                <button
-                                    type="button"
-                                    onClick={() => setMomoDetails(prev => ({ ...prev, amount: String(group.contributionAmount) }))}
-                                    className="text-sm text-primary-600 hover:underline"
-                                >
-                                    Use contribution: {moneyFormatter(group.contributionAmount, group.currency)}
-                                </button>
-                            </div>
-                            <div className="relative">
-                                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                <input
-                                    type="number"
-                                    placeholder="0.00"
-                                    value={momoDetails.amount}
-                                    onChange={(e) => setMomoDetails(prev => ({...prev, amount: e.target.value}))}
-                                    min="1"
-                                    max="10000"
-                                    className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
-                                />
-                            </div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Min: GHS 1 | Max: GHS 10,000</p>
-                        </div>
-
-                        {/* Info Box */}
-                        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-300">
-                            You will receive a USSD prompt on your phone to complete the payment.
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => setWalletModalOpen(false)}
-                                className="flex-1 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-bold transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleLoadWallet}
-                                disabled={isProcessingWallet || !momoDetails.amount || !currentUser.phoneNumber}
-                                className="flex-1 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg font-bold transition-colors flex items-center justify-center gap-2"
-                            >
-                                {isProcessingWallet ? (
-                                    <>
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                        Processing...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Smartphone className="w-4 h-4" />
-                                        Load Wallet
-                                    </>
-                                )}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        )}
-
-        {withdrawModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 border border-gray-100 dark:border-gray-700">
-                    <div className="flex items-center justify-between mb-6">
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">Request Withdrawal</h3>
-                        <button onClick={() => setWithdrawModalOpen(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
-                    </div>
-
-                    <div className="space-y-4">
-                        {/* Read-only Phone Number - Security Requirement */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Registered MoMo Number</label>
-                            <div className="relative">
-                                <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                <input 
-                                    type="text" 
-                                    value={currentUser.phoneNumber || 'No number set'} 
-                                    disabled 
-                                    readOnly 
-                                    className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 font-mono cursor-not-allowed"
-                                />
-                                <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                            </div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                Withdrawals are restricted to your registered profile number for security.
-                            </p>
-                        </div>
-
-                        {/* Amount Input */}
-                        <div>
-                            <div className="flex items-center justify-between">
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Amount ({group.currency})</label>
-                                <span className="text-xs text-gray-500">Max: {moneyFormatter(walletBalance, group.currency)}</span>
-                            </div>
-                            <div className="relative">
-                                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                <input
-                                    type="number"
-                                    placeholder="0.00"
-                                    value={withdrawRequestAmount}
-                                    onChange={(e) => setWithdrawRequestAmount(e.target.value)}
-                                    min="1"
-                                    max={walletBalance}
-                                    className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex gap-3 pt-2">
-                            <button
-                                onClick={() => setWithdrawModalOpen(false)}
-                                className="flex-1 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-bold transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleRequestWithdrawal}
-                                disabled={isRequestingWithdrawal || !withdrawRequestAmount || Number(withdrawRequestAmount) > walletBalance}
-                                className="flex-1 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg font-bold transition-colors flex items-center justify-center gap-2"
-                            >
-                                {isRequestingWithdrawal ? (
-                                    <>
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                        Processing...
-                                    </>
-                                ) : (
-                                    <>
-                                        <ArrowUpRight className="w-4 h-4" />
-                                        Request
-                                    </>
-                                )}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        )}
-
-        {confirmDialog.isOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 border">
-                    <h3 className="text-lg font-bold mb-2">{confirmDialog.title}</h3>
-                    <p className="text-gray-600 mb-6">{confirmDialog.message}</p>
-                    <div className="flex justify-end gap-3">
-                        <button onClick={() => setConfirmDialog({...confirmDialog, isOpen: false})} className="px-4 py-2">Cancel</button>
-                        <button onClick={confirmDialog.onConfirm} className={`px-4 py-2 text-white rounded-lg font-bold ${confirmDialog.type === 'danger' ? 'bg-red-600' : 'bg-primary-600'}`}>Confirm</button>
-                    </div>
-                </div>
-            </div>
-        )}
+        {renderWalletModal()}
+        {renderWithdrawModal()}
+        {renderConfirmDialog()}
     </div>
   );
 };

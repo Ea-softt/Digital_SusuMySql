@@ -105,6 +105,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   const [isEditingGroup, setIsEditingGroup] = useState(false);
   const [groupActionConfirm, setGroupActionConfirm] = useState<{ group: Group; action: 'approve' | 'reject' } | null>(null);
   const [groupRejectionReason, setGroupRejectionReason] = useState('');
+
   const [groupSearchTerm, setGroupSearchTerm] = useState('');
   const [allMemberships, setAllMemberships] = useState<any[]>([]);
 
@@ -238,6 +239,18 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
       }
   };
 
+  const handleGroupMemberAction = async (userId: string, action: 'suspend' | 'reactivate') => {
+      if (!viewGroup) return;
+      const newStatus = action === 'suspend' ? 'SUSPENDED' : 'ACTIVE';
+      if (confirm(`Are you sure you want to ${action} this member?`)) {
+          await db.updateGroupMembershipStatus(viewGroup.id, userId, newStatus);
+          // Refresh local membership list
+          const res = await fetch('http://localhost:3001/api/group-memberships');
+          const data = await res.json();
+          setAllMemberships(data);
+          onRefresh();
+      }
+  };
 
 
 
@@ -2214,6 +2227,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                      <tr>
                                          <th className="px-3 py-2">Name</th>
                                          <th className="px-3 py-2">Role</th>
+                                         <th className="px-3 py-2 text-right">Actions</th>
                                          <th className="px-3 py-2 text-right">Status</th>
                                      </tr>
                                  </thead>
@@ -2224,6 +2238,13 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                              <tr key={m.user_id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                                                  <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">{user?.name || 'Unknown'}</td>
                                                  <td className="px-3 py-2 text-gray-500 dark:text-gray-400">{m.role}</td>
+                                                 <td className="px-3 py-2 text-right">
+                                                     {m.status === 'ACTIVE' ? (
+                                                         <button onClick={() => handleGroupMemberAction(m.user_id, 'suspend')} className="text-[10px] text-red-600 hover:underline font-bold">Suspend</button>
+                                                     ) : m.status === 'SUSPENDED' ? (
+                                                         <button onClick={() => handleGroupMemberAction(m.user_id, 'reactivate')} className="text-[10px] text-green-600 hover:underline font-bold">Reactivate</button>
+                                                     ) : null}
+                                                 </td>
                                                  <td className="px-3 py-2 text-right">
                                                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                                                          m.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 

@@ -464,7 +464,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                         Verify Payouts ({pendingVerifications.length})
                     </button>
                 )}
-                {!isGlobalContext && <button
+                {!isGlobalContext && group.status !== 'SUSPENDED' && <button
                     onClick={handlePayContribution}
                     disabled={isContributing || group.payoutSchedule.length === 0}
                     className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
@@ -778,6 +778,47 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                       Please contact support for assistance.
                   </p>
               </div>
+          </div>
+      );
+  }
+
+  if (group.status === 'SUSPENDED') {
+      return (
+          <div className="space-y-6 animate-fade-in p-6">
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 text-center">
+                  <ShieldAlert className="w-12 h-12 text-red-600 mx-auto mb-4" />
+                  <h2 className="text-2xl font-bold text-red-800 dark:text-red-200 mb-2">Group Suspended</h2>
+                  <p className="text-red-600 dark:text-red-300 max-w-md mx-auto">
+                      This group has been suspended by the administrator. All group activities are paused. 
+                      You can still access your personal wallet and withdraw funds.
+                  </p>
+              </div>
+              
+              <div className="bg-gradient-to-br from-purple-900 to-indigo-900 rounded-xl p-6 text-white shadow-lg">
+                    <p className="text-purple-200 text-sm font-medium mb-1">Available to Withdraw</p>                
+                    <h2 className="text-4xl font-bold mb-4">{moneyFormatter(walletBalance, currency)}</h2>
+                    <div className="flex gap-4 text-xs text-purple-200">
+                        <div>
+                            <span className="block opacity-70">Payouts</span>
+                            <span className="font-bold text-white">{currency} {totalPayoutsReceived}</span>
+                        </div>
+                        <div>
+                            <span className="block opacity-70">Deposits</span>
+                            <span className="font-bold text-white">{currency} {totalDeposits}</span>
+                        </div>
+                        <div>
+                            <span className="block opacity-70">Contributions</span>
+                            <span className="font-bold text-white">{currency} {totalGlobalContributions}</span>
+                        </div>
+                        <div>
+                            <span className="block opacity-70">Withdrawn</span>
+                            <span className="font-bold text-white">{currency} {totalWithdrawals}</span>
+                        </div>
+                    </div>
+              </div>
+              {renderTransactions()}
+              {renderWalletModal()}
+              {renderWithdrawModal()}
           </div>
       );
   }
