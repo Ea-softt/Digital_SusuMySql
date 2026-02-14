@@ -1913,8 +1913,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                 ))}
             </select>
         </div>
-        
-        <GroupChat currentUser={currentUser} />
+
         {activeChatGroup ? (
             <GroupChat currentUser={currentUser} activeGroup={activeChatGroup} />
         ) : (
