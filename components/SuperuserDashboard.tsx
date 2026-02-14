@@ -49,6 +49,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   // State for confirmation modals
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [selectedUserForKYC, setSelectedUserForKYC] = useState<User | null>(null);
+  const [groupToDelete, setGroupToDelete] = useState<Group | null>(null);
   const [viewUser, setViewUser] = useState<User | null>(null);
   const [userToReactivate, setUserToReactivate] = useState<User | null>(null);
   const [viewUserGroups, setViewUserGroups] = useState<any[]>([]);
@@ -232,11 +233,14 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
       }
   };
 
-  const handleDeleteGroup = async (group: Group) => {
-      if (confirm(`Are you sure you want to DELETE group "${group.name}"? This cannot be undone.`)) {
-          await db.deleteGroup(group.id);
-          onRefresh();
-      }
+  const handleDeleteGroup = (group: Group) => {
+      setGroupToDelete(group);
+  };
+
+  const confirmDeleteGroup = async () => {
+      if (groupToDelete) await db.deleteGroup(groupToDelete.id);
+      setGroupToDelete(null);
+      onRefresh();
   };
 
   const handleGroupMemberAction = async (userId: string, action: 'suspend' | 'reactivate') => {
@@ -3156,6 +3160,27 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
       );
   };
 
+  const renderDeleteGroupModal = () => {
+      if (!groupToDelete) return null;
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6 max-w-sm w-full border border-gray-100 dark:border-gray-700 text-center">
+                 <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                     <Trash2 className="w-8 h-8 text-red-600" />
+                 </div>
+                 <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-2">Delete Group?</h3>
+                 <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">
+                     Are you sure you want to permanently delete group <span className="font-bold text-gray-900 dark:text-white">"{groupToDelete.name}"</span>? This action cannot be undone.
+                 </p>
+                 <div className="flex gap-3">
+                     <button onClick={() => setGroupToDelete(null)} className="flex-1 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg font-medium text-gray-700 dark:text-gray-300">Cancel</button>
+                     <button onClick={confirmDeleteGroup} className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold">Delete</button>
+                 </div>
+             </div>
+        </div>
+      );
+  };
+
   return (
     <div className="space-y-6">
       {/* Tab Navigation */}
@@ -3331,6 +3356,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
       {renderReactivateModal()}
       {renderGroupActionConfirmModal()}
       {renderVideoCallModal()}
+      {renderDeleteGroupModal()}
       
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
