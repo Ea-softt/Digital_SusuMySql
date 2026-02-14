@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { User, Transaction, Group, UserRole, AuditLog } from '../types';
 import { StatsCard } from './StatsCard';
-import { Users as UsersIcon, Shield, Activity, DollarSign, Search, AlertTriangle, CheckCircle, XCircle, Lock, Unlock, Trash2, Server, Database, Settings, ScanFace, BrainCircuit, X, TrendingUp, Download, Upload, AlertOctagon, Globe, PlusCircle, Calendar, Camera, MessageSquare, UserCog, ShieldAlert, ChevronRight, Wallet, ArrowUpRight, FileText, UserPlus, Mail, Loader2, Eye, MapPin, Smartphone, Cpu, Wifi, Phone, History, FileDown, Radar, ArrowLeft, Megaphone, Send, Clock, ShieldCheck, Info, Video } from 'lucide-react';
+import { Users as UsersIcon, Shield, Activity, DollarSign, Search, AlertTriangle, CheckCircle, XCircle, Lock, Unlock, Trash2, Server, Database, Settings, ScanFace, BrainCircuit, X, TrendingUp, Download, Upload, AlertOctagon, Globe, PlusCircle, Calendar, Camera, MessageSquare, UserCog, ShieldAlert, ChevronRight, Wallet, ArrowUpRight, FileText, UserPlus, Mail, Loader2, Eye, MapPin, Smartphone, Cpu, Wifi, Phone, History, FileDown, Radar, ArrowLeft, Megaphone, Send, Clock, ShieldCheck, Info, Video, MoreVertical } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { db } from '../services/database';
 import { GroupChat } from './GroupChat';
@@ -144,6 +144,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   const [verifiedCreators, setVerifiedCreators] = useState<Set<string>>(new Set());
   const [isVideoCallOpen, setIsVideoCallOpen] = useState(false);
   const [currentVideoCallGroup, setCurrentVideoCallGroup] = useState<Group | null>(null);
+  const [activeMenuGroupId, setActiveMenuGroupId] = useState<string | null>(null);
 
   useEffect(() => {
       const fetchCreatorsAndMemberships = async () => {
@@ -169,6 +170,16 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
           fetchCreatorsAndMemberships();
       }
   }, [groups, members]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (activeMenuGroupId && !(event.target as Element).closest('.group-menu-container')) {
+        setActiveMenuGroupId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [activeMenuGroupId]);
 
   // Update activeTab when initialTab prop changes (from sidebar navigation)
   const handleGroupAction = async () => {
@@ -1306,9 +1317,29 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                      </div>
                                  </div>
                              </div>
-                             <div className="flex gap-1">
+                             <div className="flex gap-1 relative group-menu-container">
                                  <button onClick={() => openEditGroup(group)} className="p-1.5 text-gray-400 hover:text-primary-600 transition-colors"><Settings className="w-4 h-4" /></button>
-                                 <button onClick={() => handleDeleteGroup(group)} className="p-1.5 text-gray-400 hover:text-red-600 transition-colors" title="Delete Group"><Trash2 className="w-4 h-4" /></button>
+                                 <button onClick={() => setActiveMenuGroupId(activeMenuGroupId === group.id ? null : group.id)} className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"><MoreVertical className="w-4 h-4" /></button>
+                                 
+                                 {activeMenuGroupId === group.id && (
+                                     <div className="absolute right-0 top-8 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-20 overflow-hidden animate-fade-in-up">
+                                         <button onClick={() => { setActiveChatGroup(group); setActiveTab('chat'); setActiveMenuGroupId(null); }} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2">
+                                             <MessageSquare className="w-4 h-4" /> View Chat
+                                         </button>
+                                         {group.status === 'ACTIVE' ? (
+                                             <button onClick={() => { handleSuspendGroup(group); setActiveMenuGroupId(null); }} className="w-full text-left px-4 py-2.5 text-sm text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 flex items-center gap-2">
+                                                 <Lock className="w-4 h-4" /> Suspend Group
+                                             </button>
+                                         ) : (
+                                             <button onClick={() => { db.updateGroupStatus(group.id, 'ACTIVE', currentUser.id).then(onRefresh); setActiveMenuGroupId(null); }} className="w-full text-left px-4 py-2.5 text-sm text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 flex items-center gap-2">
+                                                 <Unlock className="w-4 h-4" /> Reactivate
+                                             </button>
+                                         )}
+                                         <button onClick={() => { handleDeleteGroup(group); setActiveMenuGroupId(null); }} className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 border-t border-gray-100 dark:border-gray-700">
+                                             <Trash2 className="w-4 h-4" /> Delete Group
+                                         </button>
+                                     </div>
+                                 )}
                              </div>
                          </div>
                          
