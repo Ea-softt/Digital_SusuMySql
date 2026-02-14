@@ -238,7 +238,22 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   };
 
   const confirmDeleteGroup = async () => {
-      if (groupToDelete) await db.deleteGroup(groupToDelete.id);
+      if (groupToDelete) {
+          // Notify creator
+          const creator = groupCreators[groupToDelete.id];
+          if (creator) {
+              await db.createNotification({
+                  id: `notif-del-${Date.now()}`,
+                  recipientId: creator.id,
+                  title: 'Group Deleted',
+                  message: `Your group "${groupToDelete.name}" has been deleted by the Superuser. You can still access your personal wallet to withdraw remaining funds.`,
+                  type: 'error',
+                  timestamp: Date.now(),
+                  read: false
+              });
+          }
+          await db.deleteGroup(groupToDelete.id);
+      }
       setGroupToDelete(null);
       onRefresh();
   };
@@ -1236,6 +1251,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                             >
                                                 <Video className="w-4 h-4" />
                                             </button>
+                                            <button onClick={() => handleDeleteGroup(group)} className="p-1 bg-red-100 text-red-700 rounded" title="Delete"><Trash2 className="w-4 h-4" /></button>
                                         </div>
                                     </td>
                                 </tr>

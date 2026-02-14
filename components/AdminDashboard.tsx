@@ -566,7 +566,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
     );
   };
 
-  if (group.status === 'SUSPENDED') {
+  if (group.status === 'SUSPENDED' || group.status === 'DELETED') {
     const adminPersonalTransactions = transactions.filter(tx =>
      tx.userId === currentUser.id &&
      tx.type !== 'CONTRIBUTION'
@@ -576,9 +576,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
        <div className="space-y-6 animate-fade-in p-6">
            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 text-center">
                <ShieldAlert className="w-12 h-12 text-red-600 mx-auto mb-4" />
-               <h2 className="text-2xl font-bold text-red-800 dark:text-red-200 mb-2">Group Suspended</h2>
+               <h2 className="text-2xl font-bold text-red-800 dark:text-red-200 mb-2">{group.status === 'DELETED' ? 'Group Deleted' : 'Group Suspended'}</h2>
                <p className="text-red-600 dark:text-red-300 max-w-md mx-auto">
-                   This group has been suspended. Access is restricted to wallet functions only.
+                   {group.status === 'DELETED' 
+                    ? 'This group has been deleted by the Superuser. You can still access your personal wallet to withdraw remaining funds.' 
+                    : 'This group has been suspended. Access is restricted to wallet functions only.'}
                </p>
            </div>
            

@@ -98,7 +98,7 @@ export interface Group {
   reminderDaysBefore: number; 
   welcomeMessage?: string;
   icon?: string;
-  status: 'ACTIVE' | 'PENDING_VERIFICATION' | 'REJECTED' | 'SUSPENDED';
+  status: 'ACTIVE' | 'PENDING_VERIFICATION' | 'REJECTED' | 'SUSPENDED' | 'DELETED';
   cycleStartDate?: string;
   cycleEndDate?: string;
   scheduledPayoutAmount?: number; // Estimated payout amount

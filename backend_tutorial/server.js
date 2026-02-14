@@ -103,9 +103,9 @@ async function initializeDatabase() {
         // Add status column to savings_groups for approval workflow
         const [sgStatus] = await connection.query(`SHOW COLUMNS FROM savings_groups LIKE 'status'`);
         if (sgStatus.length === 0) {
-            await connection.query(`ALTER TABLE savings_groups ADD COLUMN status ENUM('ACTIVE', 'PENDING_VERIFICATION', 'REJECTED', 'SUSPENDED') DEFAULT 'ACTIVE'`);
+            await connection.query(`ALTER TABLE savings_groups ADD COLUMN status ENUM('ACTIVE', 'PENDING_VERIFICATION', 'REJECTED', 'SUSPENDED', 'DELETED') DEFAULT 'ACTIVE'`);
         } else {
-            await connection.query(`ALTER TABLE savings_groups MODIFY COLUMN status ENUM('ACTIVE', 'PENDING_VERIFICATION', 'REJECTED', 'SUSPENDED') DEFAULT 'ACTIVE'`);
+            await connection.query(`ALTER TABLE savings_groups MODIFY COLUMN status ENUM('ACTIVE', 'PENDING_VERIFICATION', 'REJECTED', 'SUSPENDED', 'DELETED') DEFAULT 'ACTIVE'`);
         }
 
         // Add approved_by column to savings_groups
@@ -318,7 +318,8 @@ app.put('/api/groups/:id/status', async (req, res) => {
 
 app.delete('/api/groups/:id', async (req, res) => {
     try {
-        await pool.query('DELETE FROM savings_groups WHERE id = ?', [req.params.id]);
+        // Soft delete to preserve transaction history for wallet access
+        await pool.query('UPDATE savings_groups SET status = "DELETED" WHERE id = ?', [req.params.id]);
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });
