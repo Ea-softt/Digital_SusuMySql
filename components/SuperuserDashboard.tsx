@@ -1865,8 +1865,34 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                 </button>
             </form>
         </div>
+
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row items-center gap-4">
+            <label className="text-sm font-bold text-gray-700 dark:text-gray-300 whitespace-nowrap">Select Group to Monitor:</label>
+            <select 
+                className="flex-1 w-full p-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                onChange={(e) => {
+                    const group = groups.find(g => g.id === e.target.value);
+                    setActiveChatGroup(group || null);
+                }}
+                value={activeChatGroup?.id || ''}
+            >
+                <option value="">-- Select a Group --</option>
+                {groups.filter(g => g.status === 'ACTIVE' || g.status === 'SUSPENDED').map(g => (
+                    <option key={g.id} value={g.id}>{g.name} ({g.membersCount} members)</option>
+                ))}
+            </select>
+        </div>
         
         <GroupChat currentUser={currentUser} />
+        {activeChatGroup ? (
+            <GroupChat currentUser={currentUser} activeGroup={activeChatGroup} />
+        ) : (
+             <div className="bg-white dark:bg-gray-800 p-12 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 text-center text-gray-500 dark:text-gray-400 flex flex-col items-center justify-center h-[400px]">
+                <MessageSquare className="w-16 h-16 mb-4 opacity-20" />
+                <p className="text-lg font-medium">Select a group above to view the chat.</p>
+                <p className="text-sm mt-2">You can monitor conversations and moderate messages.</p>
+            </div>
+        )}
     </div>
   );
 
