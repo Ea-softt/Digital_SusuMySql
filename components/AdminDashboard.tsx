@@ -1580,6 +1580,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
     // Find the index of the next recipient for highlighting in the UI.
     const nextUserIndex = validPayoutOrder.findIndex(userId => !paidUserIds.has(userId));
 
+    const handleRejectPayout = async () => {
+        if (!nextRecipient) return;
+        
+        if (confirm(`Are you sure you want to skip ${nextRecipient.name} for this payout? They will be moved to the end of the schedule.`)) {
+            const newOrder = payoutOrder.filter(id => id !== nextRecipient.id);
+            newOrder.push(nextRecipient.id);
+            
+            setPayoutOrder(newOrder);
+            try {
+                await db.updateGroup(group.id, { ...group, payoutSchedule: newOrder });
+                if (onRefresh) onRefresh();
+            } catch (e) {
+                console.error("Failed to skip member:", e);
+                alert("Failed to update payout order.");
+            }
+        }
+    };
+
     const handleManualPayout = async () => {
         if (!nextRecipient) {
             alert("No one is scheduled for the next payout.");
@@ -1793,14 +1811,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                                    <p className="text-sm text-primary-600 dark:text-primary-400">Scheduled for <span className="font-bold">{moneyFormatter(group.scheduledPayoutAmount || 0, group.currency)}</span></p>
                                </div>
                            </div>
-                            <button 
-                                onClick={handleManualPayout} 
-                                disabled={isProcessingPayout || group.totalPool <= 0}
-                                className="w-full mt-4 sm:mt-0 sm:w-auto px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-bold shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {isProcessingPayout ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-                                {isProcessingPayout ? 'Processing...' : 'Pay Now'}
-                            </button>
+                           <div className="flex gap-3 mt-4 sm:mt-0 w-full sm:w-auto">
+                                <button 
+                                    onClick={handleRejectPayout}
+                                    disabled={isProcessingPayout}
+                                    className="flex-1 sm:flex-none px-6 py-3 bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-400 rounded-lg font-bold shadow-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                >
+                                    <XCircle className="w-5 h-5" />
+                                    Reject
+                                </button>
+                                <button 
+                                    onClick={handleManualPayout} 
+                                    disabled={isProcessingPayout || group.totalPool <= 0}
+                                    className="flex-1 sm:flex-none px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-bold shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isProcessingPayout ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                                    {isProcessingPayout ? 'Processing...' : 'Pay Now'}
+                                </button>
+                           </div>
                         </div>
                     ) : (
                         // This view shows while data is loading or if there's no next recipient.

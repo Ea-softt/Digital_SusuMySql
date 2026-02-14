@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Group, Transaction, User, UserRole } from '../types';
 import { StatsCard } from './StatsCard';
-import { Wallet, Calendar, PiggyBank, History, Search, ArrowRight, CheckCircle, Clock, ShieldAlert, UserCheck, LayoutDashboard, Users, DollarSign, Smartphone, Loader2, Lock, Copy, AlertTriangle, X, Shield, Settings, LogOut, Trash2, ArrowLeft } from 'lucide-react';
+import { Wallet, Calendar, PiggyBank, History, Search, ArrowRight, CheckCircle, Clock, ShieldAlert, UserCheck, LayoutDashboard, Users, DollarSign, Smartphone, Loader2, Lock, Copy, AlertTriangle, X, Shield, Settings, LogOut, Trash2, ArrowLeft, XCircle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, AreaChart, Area, CartesianGrid, PieChart, Pie, Legend } from 'recharts';
 import { db } from '../services/database';
 import { moneyFormatter } from '../utils/formatters';
@@ -408,6 +408,43 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
       }
   };
 
+  const handleRejectPayouts = async () => {
+      if (pendingVerifications.length === 0) return;
+      
+      if (window.confirm(`Are you sure you want to REJECT ${pendingVerifications.length} pending payout(s)? This indicates you did not receive the funds or there is an error.`)) {
+          for (const tx of pendingVerifications) {
+              try {
+                  await fetch(`http://localhost:3001/api/transactions/${tx.id}`, { method: 'DELETE' });
+                  
+                  await db.sendGroupMessage(
+                      currentUser,
+                      `❌ VERIFICATION REJECTED: I have rejected the payout of ${moneyFormatter(tx.amount, currency)} to ${tx.userName}.`,
+                      group.id
+                  );
+                  
+                  for (const adminId of groupAdmins) {
+                    await db.createNotification({
+                        id: `notif-reject-${Date.now()}-${adminId}`,
+                        recipientId: adminId,
+                        title: 'Payout Rejected',
+                        message: `${currentUser.name} rejected the payout verification for ${tx.userName}.`,
+                        type: 'error',
+                        timestamp: Date.now(),
+                        read: false
+                    });
+                  }
+
+              } catch (e) {
+                  console.error("Failed to reject transaction", e);
+              }
+          }
+          alert("Payouts rejected.");
+          setPendingVerifications([]);
+          if (onRefresh) onRefresh();
+          db.getGroupContributionTransactions(group.id).then(setGroupContributions);
+      }
+  };
+
   const handleVerifySuspension = async (membership: any) => {
       const memberName = members.find(m => m.id === membership.user_id)?.name || 'Member';
       if (window.confirm(`Verify suspension of ${memberName}? They will be removed from active status.`)) {
@@ -459,10 +496,16 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                     <ArrowRight className="w-4 h-4" /> Withdraw
                 </button>
                 {pendingVerifications.length > 0 && (
-                    <button onClick={handleVerifyPayouts} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors animate-pulse">
-                        <CheckCircle className="w-4 h-4" />
-                        Verify Payouts ({pendingVerifications.length})
-                    </button>
+                    <>
+                        <button onClick={handleRejectPayouts} className="bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-400 px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors">
+                            <XCircle className="w-4 h-4" />
+                            Reject
+                        </button>
+                        <button onClick={handleVerifyPayouts} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors animate-pulse">
+                            <CheckCircle className="w-4 h-4" />
+                            Verify Payouts ({pendingVerifications.length})
+                        </button>
+                    </>
                 )}
                 {!isGlobalContext && group.status !== 'SUSPENDED' && <button
                     onClick={handlePayContribution}

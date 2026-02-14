@@ -316,6 +316,15 @@ app.put('/api/groups/:id/status', async (req, res) => {
     }
 });
 
+app.delete('/api/groups/:id', async (req, res) => {
+    try {
+        await pool.query('DELETE FROM savings_groups WHERE id = ?', [req.params.id]);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.get('/api/users', async (req, res) => {
     try {
         const [rows] = await pool.query('SELECT * FROM users ORDER BY join_date DESC');
