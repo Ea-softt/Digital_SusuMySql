@@ -372,7 +372,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
     }, 30000); // Check every 30 seconds
 
     return () => clearInterval(threatDetectionInterval);
-  }, [activeTab, members]);
+  }, [activeTab, members, transactions]);
 
   // Auto-run security scan if tab is visited and list is empty
   useEffect(() => {
@@ -491,105 +491,96 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   // Real-time Threat Detection Function
   const performRealTimeThreatDetection = () => {
     const newAlerts: SecurityAlert[] = [];
-    const activeMembers = members.filter(m => m.status === 'ACTIVE');
+    const today = new Date().toISOString().split('T')[0];
 
-    // Threat Pattern 1: Unusual Login Times (late night activity)
-    const now = new Date();
-    const hour = now.getHours();
-    if (hour >= 22 || hour <= 4) { // Late night hours
-      const lateNightUser = activeMembers[Math.floor(Math.random() * activeMembers.length)];
-      if (lateNightUser && Math.random() > 0.7) {
-        newAlerts.push({
-          id: `sec-login-${Date.now()}`,
-          type: 'FAILED_LOGIN',
-          severity: 'MEDIUM',
-          title: 'Unusual Login Time Detected',
-          description: `${lateNightUser.name} logged in at ${now.toLocaleTimeString()} - unusual activity pattern.`,
-          user: lateNightUser,
-          details: { 
-            time: now.toLocaleTimeString(), 
-            location: lateNightUser.location || 'Unknown',
-            previousLoginTime: '14:32 (2 days ago)',
-            anomalyScore: '78%'
-          },
-          timestamp: Date.now()
-        });
-      }
-    }
+    // 1. High Transaction Volume Analysis
+    const dailyTxCounts: Record<string, number> = {};
+    const dailyTxAmounts: Record<string, number> = {};
 
-    // Threat Pattern 2: Multiple Failed Login Attempts
-    if (activeMembers.length > 0 && Math.random() > 0.8) {
-      const suspectUser = activeMembers[Math.floor(Math.random() * activeMembers.length)];
-      newAlerts.push({
-        id: `sec-failed-${Date.now()}`,
-        type: 'FAILED_LOGIN',
-        severity: 'HIGH',
-        title: 'Excessive Failed Login Attempts',
-        description: `${suspectUser.name} has ${Math.floor(Math.random() * 5) + 3} failed login attempts in the last 10 minutes.`,
-        user: suspectUser,
-        details: {
-          failedAttempts: Math.floor(Math.random() * 5) + 3,
-          timeWindow: 'Last 10 minutes',
-          lastAttempt: new Date(Date.now() - Math.random() * 300000).toLocaleTimeString(),
-          ipAddresses: ['102.176.234.12', '102.176.234.15']
-        },
-        timestamp: Date.now()
-      });
-    }
+    transactions.forEach(tx => {
+        if (tx.date === today) {
+            dailyTxCounts[tx.userId] = (dailyTxCounts[tx.userId] || 0) + 1;
+            dailyTxAmounts[tx.userId] = (dailyTxAmounts[tx.userId] || 0) + tx.amount;
+        }
+    });
 
-    // Threat Pattern 3: Unusual Transaction Volume
-    const highActivityUser = activeMembers[Math.floor(Math.random() * activeMembers.length)];
-    if (highActivityUser && Math.random() > 0.75) {
-      const transactionCount = Math.floor(Math.random() * 20) + 10;
-      newAlerts.push({
-        id: `sec-volume-${Date.now()}`,
-        type: 'HIGH_VOLUME',
-        severity: 'MEDIUM',
-        title: 'High Transaction Volume Alert',
-        description: `${highActivityUser.name} has initiated ${transactionCount} transactions in 1 hour - 300% above normal.`,
-        user: highActivityUser,
-        details: {
-          transactionsToday: transactionCount,
-          averageDailyVolume: 5,
-          totalAmount: `GHS ${(Math.random() * 10000 + 5000).toFixed(2)}`,
-          anomalyLevel: '85%'
-        },
-        timestamp: Date.now()
-      });
-    }
+    Object.entries(dailyTxCounts).forEach(([userId, count]) => {
+        if (count >= 5) { // Threshold: 5 transactions per day
+            const user = members.find(m => m.id === userId);
+            if (user) {
+                newAlerts.push({
+                    id: `sec-vol-${userId}-${today}`,
+                    type: 'HIGH_VOLUME',
+                    severity: 'MEDIUM',
+                    title: 'High Transaction Volume',
+                    description: `${user.name} has performed ${count} transactions today.`,
+                    user: user,
+                    details: {
+                        transactionsToday: count,
+                        totalAmount: `GHS ${dailyTxAmounts[userId].toLocaleString()}`,
+                        threshold: '5 per day'
+                    },
+                    timestamp: Date.now()
+                });
+            }
+        }
+    });
 
-    // Threat Pattern 4: Suspicious IP/Device Changes
-    if (members.length >= 2 && Math.random() > 0.85) {
-      const user = activeMembers[Math.floor(Math.random() * activeMembers.length)];
-      if (user) {
-        newAlerts.push({
-          id: `sec-device-${Date.now()}`,
-          type: 'MULTI_ACCOUNT',
-          severity: 'HIGH',
-          title: 'Unauthorized Device Access',
-          description: `New device detected for ${user.name} from unfamiliar location.`,
-          user: user,
-          details: {
-            newDevice: 'Samsung Galaxy A52 (Android 12)',
-            previousDevices: ['iPhone 13 Pro', 'MacBook Pro'],
-            newLocation: 'Kumasi, Ghana',
-            lastKnownLocation: user.location || 'Accra',
-            riskScore: '92%'
-          },
-          timestamp: Date.now()
-        });
-      }
-    }
+    // 2. Large Transaction Monitor
+    transactions.forEach(tx => {
+        if (tx.date === today && tx.amount >= 5000) {
+             const user = members.find(m => m.id === tx.userId);
+             if (user) {
+                 newAlerts.push({
+                     id: `sec-large-${tx.id}`,
+                     type: 'HIGH_VOLUME',
+                     severity: 'HIGH',
+                     title: 'Large Value Transaction',
+                     description: `High value transaction of GHS ${tx.amount.toLocaleString()} detected.`,
+                     user: user,
+                     details: {
+                         transactionId: tx.id,
+                         amount: `GHS ${tx.amount.toLocaleString()}`,
+                         type: tx.type
+                     },
+                     timestamp: Date.now()
+                 });
+             }
+        }
+    });
+
+    // 3. Suspended Account Activity
+    const suspendedIds = new Set(members.filter(m => m.status === 'SUSPENDED').map(m => m.id));
+    transactions.forEach(tx => {
+        if (tx.date === today && suspendedIds.has(tx.userId)) {
+            const user = members.find(m => m.id === tx.userId);
+            if (user) {
+                newAlerts.push({
+                    id: `sec-susp-${tx.id}`,
+                    type: 'FAILED_LOGIN',
+                    severity: 'HIGH',
+                    title: 'Suspended User Activity',
+                    description: `Activity detected on suspended account: ${user.name}`,
+                    user: user,
+                    details: {
+                        transactionId: tx.id,
+                        action: tx.type
+                    },
+                    timestamp: Date.now()
+                });
+            }
+        }
+    });
 
     // Add new alerts if any were generated
     if (newAlerts.length > 0) {
       setSecurityAlerts(prev => {
-        // Avoid duplicate alerts, keep most recent 5
+        // Avoid duplicate alerts, keep most recent 50
         const combined = [...prev, ...newAlerts];
         const unique = combined.filter((alert, index, self) =>
           index === self.findIndex(a => a.type === alert.type && a.user.id === alert.user.id)
         );
-        return unique.slice(-5);
+        return unique.slice(-50);
       });
     }
   };
