@@ -8,6 +8,7 @@ import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContai
 import { db } from '../services/database';
 import { GroupChat } from './GroupChat';
 import { moneyFormatter } from '../utils/formatters';
+import { initiateWithdrawal } from '../services/paystackService';
 
 
 
@@ -679,25 +680,35 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
       setIsWithdrawing(true);
       setShowWithdrawConfirm(false);
       
-      setTimeout(() => {
-          const amount = Number(withdrawAmount);
-          const withdrawalTx: Transaction = {
-              id: `su-wd-${Date.now()}`,
-              userId: currentUser.id,
-              userName: `Superuser Withdrawal to ${withdrawProvider} (${withdrawPhone})`,
-              type: 'WITHDRAWAL',
-              amount: amount,
-              date: new Date().toISOString().split('T')[0],
-              status: 'COMPLETED'
-          };
-          
-          db.addTransaction(withdrawalTx);
-          setWithdrawAmount('');
-          setWithdrawPassword('');
+      const amount = Number(withdrawAmount);
+      
+      initiateWithdrawal({
+          amount,
+          recipientEmail: currentUser.email,
+          accountNumber: withdrawPhone,
+          provider: withdrawProvider,
+          userId: currentUser.id
+      }).then(result => {
+            const withdrawalTx: Transaction = {
+                id: result.transfer_code || `su-wd-${Date.now()}`,
+                userId: currentUser.id,
+                userName: `Superuser Withdrawal to ${withdrawProvider} (${withdrawPhone})`,
+                type: 'WITHDRAWAL',
+                amount: amount,
+                date: new Date().toISOString().split('T')[0],
+                status: 'COMPLETED'
+            };
+            
+            db.addTransaction(withdrawalTx);
+            setWithdrawAmount('');
+            setWithdrawPassword('');
+            onRefresh();
+            alert(`Successfully processed withdrawal of GHS ${amount.toLocaleString()} to ${withdrawProvider}.`);
+      }).catch(err => {
+          alert(`Withdrawal failed: ${err.message}`);
+      }).finally(() => {
           setIsWithdrawing(false);
-          onRefresh();
-          alert(`Successfully processed withdrawal of GHS ${amount.toLocaleString()} to ${withdrawProvider} (${withdrawPhone}).`);
-      }, 2000);
+      });
   };
   
   const handleExportLedger = () => {

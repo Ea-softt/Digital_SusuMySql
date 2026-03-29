@@ -9,6 +9,7 @@ import { GroupChat } from './GroupChat';
 import { AIHelpCenter } from './AIHelpCenter';
 import { moneyFormatter } from '../utils/formatters';
 import { processGhanaMobileMoneyPayment, validateMobileMoneyTransaction, normalizePhoneNumber, getAvailableProviders } from '../services/ghanaMoneyService';
+import { initializePaystackPayment } from '../services/paystackService';
 // reverted: use DollarSign from lucide-react instead of custom CediSign
 
 interface AdminDashboardProps {
@@ -273,52 +274,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
       setIsProcessingWallet(true);
       try {
           const amount = Number(momoDetails.amount);
-          const phoneNumber = currentUser.phoneNumber;
-
-          // Validate the mobile money transaction
-          const validation = validateMobileMoneyTransaction(
-              momoDetails.provider as any,
-              phoneNumber,
-              amount
-          );
-
-          if (!validation.valid) {
-              alert(`Validation failed:\n${validation.errors.join('\n')}`);
-              setIsProcessingWallet(false);
-              return;
-          }
-
-          // Process Ghana Mobile Money Payment
-          const paymentResult = await processGhanaMobileMoneyPayment(
-              momoDetails.provider as any,
-              phoneNumber,
-              amount,
-              group.currency
-          );
-
-          if (!paymentResult.success) {
-              alert(`Payment Failed: ${paymentResult.error || paymentResult.message}`);
-              setIsProcessingWallet(false);
-              return;
-          }
-
-          // Create transaction record
-          const newTx: Transaction = {
-              id: paymentResult.transactionId || `tx-d-${Date.now()}`,
-              userId: currentUser.id,
-              userName: currentUser.name,
-              type: 'DEPOSIT',
+          
+          await initializePaystackPayment({
+              email: currentUser.email,
               amount: amount,
-              date: new Date().toISOString().split('T')[0],
-              status: 'PENDING' // Mobile Money transactions are initially pending
-          };
-
-          await db.addTransaction(newTx);
-          if (onRefresh) onRefresh();
-          setWalletModalOpen(false);
-          setMomoDetails(prev => ({ ...prev, amount: '' }));
-
-          alert(`Payment Initiated!\n\n${paymentResult.message}\n\nTransaction ID: ${paymentResult.transactionId}`);
+              currency: group.currency,
+              metadata: {
+                  userId: currentUser.id,
+                  type: 'WALLET_LOAD'
+              },
+              onSuccess: async (reference) => {
+                  const newTx: Transaction = {
+                      id: reference,
+                      userId: currentUser.id,
+                      userName: currentUser.name,
+                      type: 'DEPOSIT',
+                      amount: amount,
+                      date: new Date().toISOString().split('T')[0],
+                      status: 'COMPLETED'
+                  };
+                  await db.addTransaction(newTx);
+                  if (onRefresh) onRefresh();
+                  setWalletModalOpen(false);
+                  setMomoDetails(prev => ({ ...prev, amount: '' }));
+                  alert(`Wallet loaded successfully! Ref: ${reference}`);
+              },
+              onClose: () => setIsProcessingWallet(false)
+          });
       } catch (err) {
           alert(`Payment failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
       } finally {
