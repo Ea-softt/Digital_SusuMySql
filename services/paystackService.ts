@@ -1,4 +1,4 @@
-import PaystackPop from '@paystack/inline-js';
+//import PaystackPop from '@paystack/inline-js';
 
 /**
  * Paystack Service for handling frontend payments and interacting with the backend for transfers.

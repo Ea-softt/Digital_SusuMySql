@@ -302,7 +302,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
               onClose: () => setIsProcessingWallet(false)
           });
       } catch (err) {
-          alert(`Payment failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+          alert(`Payment failed: ${err instanceof Error ? err.message : String(err)}`);
       } finally {
           setIsProcessingWallet(false);
       }
@@ -1708,9 +1708,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                     } else {
                         alert("Failed to rollback contribution.");
                     }
-                } catch (e) {
-                    console.error(e);
-                    alert("Error connecting to server.");
+                } catch (err) {
+                    console.error(err);
+                    alert(`Error connecting to server: ${err instanceof Error ? err.message : String(err)}`);
                 }
                 setConfirmDialog(prev => ({ ...prev, isOpen: false }));
             }
@@ -1747,9 +1747,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                     } else {
                         alert("Failed to rollback transactions.");
                     }
-                } catch (e) {
-                    console.error(e);
-                    alert("Error connecting to server.");
+                } catch (err) {
+                    console.error(err);
+                    alert(`Error connecting to server: ${err instanceof Error ? err.message : String(err)}`);
                 }
                 setConfirmDialog(prev => ({ ...prev, isOpen: false }));
             }

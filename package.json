@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.30.0",
+    "@paystack/inline-js": "^2.22.8",
     "body-parser": "^2.2.2",
     "cors": "^2.8.5",
     "express": "^5.2.1",
