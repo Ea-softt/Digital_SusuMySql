@@ -11,6 +11,18 @@ app.use(bodyParser.json());
 const SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 const PUBLIC_KEY = process.env.PAYSTACK_PUBLIC_KEY;
 
+// Explicitly check for keys
+if (!SECRET_KEY || !PUBLIC_KEY) {
+    console.error("❌ ERROR: Missing Paystack API Keys in .env file!");
+}
+
+// Debug log to ensure environment variables are loaded
+console.log("Paystack Keys Loaded:", {
+    hasSecretKey: !!SECRET_KEY,
+    hasPublicKey: !!PUBLIC_KEY,
+    publicKeyPrefix: PUBLIC_KEY ? PUBLIC_KEY.substring(0, 7) : 'None'
+});
+
 /**
  * Helper to make Paystack API requests using the https module
  */
@@ -51,7 +63,17 @@ const paystackRequest = (path, method, data) => {
  * Endpoint to get the Paystack Public Key
  */
 app.get('/api/paystack/key', (req, res) => {
-    res.json({ publicKey: PUBLIC_KEY });
+    try {
+        console.log(`[GET] ${req.url} - Request for Public Key`);
+        if (!PUBLIC_KEY) {
+            console.error("Error: PAYSTACK_PUBLIC_KEY is not defined in .env file");
+            return res.status(500).json({ error: "Internal Server Error: Public Key not configured on server." });
+        }
+        res.json({ publicKey: PUBLIC_KEY });
+    } catch (error) {
+        console.error("Fatal error in /api/paystack/key:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
 });
 
 /**
@@ -59,6 +81,7 @@ app.get('/api/paystack/key', (req, res) => {
  * This matches the initiateWithdrawal call in the Dashboards
  */
 app.post('/api/paystack/withdraw', async (req, res) => {
+    console.log(`[POST] ${req.url} - Processing withdrawal for:`, req.body.recipientEmail);
     const { amount, recipientEmail, accountNumber, provider, userId } = req.body;
 
     try {
@@ -98,7 +121,16 @@ app.post('/api/paystack/withdraw', async (req, res) => {
     }
 });
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-    console.log(`Digital Susu Paystack Backend running on port ${PORT}`);
+const PORT = 3002; // Use a fixed port to avoid conflicts with VITE's environment variables
+const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`\n=========================================`);
+    console.log(`🚀 Paystack Backend is RUNNING`);
+    console.log(`🔗 Local Access: http://localhost:${PORT}/api/paystack/key`);
+    console.log(`=========================================\n`);
+}).on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+        console.error(`❌ ERROR: Port ${PORT} is already in use. Make sure you don't have another server running on this port.`);
+    } else {
+        console.error("❌ Server Error:", err);
+    }
 });

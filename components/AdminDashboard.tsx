@@ -302,7 +302,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
               onClose: () => setIsProcessingWallet(false)
           });
       } catch (err) {
-          alert(`Payment failed: ${err instanceof Error ? err.message : String(err)}`);
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          alert(`Payment failed: ${errorMessage}`);
       } finally {
           setIsProcessingWallet(false);
       }
@@ -1054,7 +1055,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                   setSelectedMembersForPayout([]);
 
               } catch (err) {
-                  alert(`Payout failed: ${err instanceof Error ? err.message : 'An unknown error occurred.'}`);
+                  const errorMessage = err instanceof Error ? err.message : String(err);
+                  alert(`Payout failed: ${errorMessage}`);
               } finally {
                   setIsProcessingSplitPayout(false);
                   setConfirmDialog(prev => ({...prev, isOpen: false}));
@@ -1708,9 +1710,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                     } else {
                         alert("Failed to rollback contribution.");
                     }
-                } catch (err) {
+                } catch (err: unknown) {
                     console.error(err);
-                    alert(`Error connecting to server: ${err instanceof Error ? err.message : String(err)}`);
+                    const errorMessage = err instanceof Error ? err.message : String(err);
+                    alert(`Error connecting to server: ${errorMessage}`);
                 }
                 setConfirmDialog(prev => ({ ...prev, isOpen: false }));
             }
@@ -1747,9 +1750,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                     } else {
                         alert("Failed to rollback transactions.");
                     }
-                } catch (err) {
+                } catch (err: unknown) {
                     console.error(err);
-                    alert(`Error connecting to server: ${err instanceof Error ? err.message : String(err)}`);
+                    const errorMessage = err instanceof Error ? err.message : String(err);
+                    alert(`Error connecting to server: ${errorMessage}`);
                 }
                 setConfirmDialog(prev => ({ ...prev, isOpen: false }));
             }

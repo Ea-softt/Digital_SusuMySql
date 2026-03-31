@@ -705,7 +705,8 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
             onRefresh();
             alert(`Successfully processed withdrawal of GHS ${amount.toLocaleString()} to ${withdrawProvider}.`);
       }).catch(err => {
-          alert(`Withdrawal failed: ${err instanceof Error ? err.message : String(err)}`);
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          alert(`Withdrawal failed: ${errorMessage}`);
       }).finally(() => {
           setIsWithdrawing(false);
       });

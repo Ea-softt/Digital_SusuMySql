@@ -1,4 +1,4 @@
-//import PaystackPop from '@paystack/inline-js';
+import PaystackPop from '@paystack/inline-js';
 
 /**
  * Paystack Service for handling frontend payments and interacting with the backend for transfers.
@@ -20,10 +20,16 @@ interface PaystackPaymentOptions {
 export const initializePaystackPayment = async (options: PaystackPaymentOptions) => {
   try {
     // Fetch the Public Key from the backend to keep it out of the frontend source code bundle
-    const response = await fetch('/api/paystack/key');
+    // Using relative path to utilize the Vite proxy defined in vite.config.ts
+    const response = await fetch('/api/paystack/key', { cache: 'no-cache' });
+    
+    if (!response.ok) {
+        throw new Error(`Server returned ${response.status} (${response.statusText}) at /api/paystack/key`);
+    }
+
     const { publicKey } = await response.json();
 
-    if (!publicKey) throw new Error("Could not retrieve Paystack configuration.");
+    if (!publicKey) throw new Error("Public Key is missing in server response.");
 
     const paystack = new PaystackPop();
   
@@ -42,8 +48,10 @@ export const initializePaystackPayment = async (options: PaystackPaymentOptions)
         options.onClose();
       },
     });
-  } catch (error) {
-    alert("Failed to initialize payment gateway. Please try again.");
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("Paystack Initialization Error:", errorMessage);
+    alert(`Failed to initialize payment gateway: ${errorMessage}`);
     options.onClose();
   }
 };
