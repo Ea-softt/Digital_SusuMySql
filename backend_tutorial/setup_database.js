@@ -91,6 +91,24 @@ async function setupDatabase() {
             )
         `);
 
+        console.log('💳 Creating Table: payment_confirmations');
+        await connection.query(`
+            CREATE TABLE IF NOT EXISTS payment_confirmations (
+                reference VARCHAR(100) PRIMARY KEY,
+                access_code VARCHAR(100),
+                user_id VARCHAR(50),
+                amount DECIMAL(15, 2) NOT NULL,
+                currency VARCHAR(10) DEFAULT 'GHS',
+                status ENUM('PENDING', 'COMPLETED', 'FAILED', 'REJECTED') DEFAULT 'PENDING',
+                payment_type ENUM('DEPOSIT', 'CONTRIBUTION') DEFAULT 'DEPOSIT',
+                metadata JSON,
+                approved_by VARCHAR(50),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        `);
+
         console.log('💬 Creating Table: group_messages');
         await connection.query(`
             CREATE TABLE IF NOT EXISTS group_messages (

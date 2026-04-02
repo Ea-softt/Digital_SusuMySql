@@ -18,7 +18,7 @@ requiredEnv.forEach(key => {
 });
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 // 🛡️ PRODUCTION HARDENING: Security Headers
 app.use(helmet());
@@ -144,6 +144,23 @@ async function initializeDatabase() {
                 verification_status ENUM('VERIFIED', 'PENDING', 'REJECTED', 'UNVERIFIED') DEFAULT 'UNVERIFIED',
                 join_date DATETIME DEFAULT CURRENT_TIMESTAMP,
                 reliability_score INT DEFAULT 100
+            )
+        `);
+
+        await connection.query(`
+            CREATE TABLE IF NOT EXISTS payment_confirmations (
+                reference VARCHAR(100) PRIMARY KEY,
+                access_code VARCHAR(100),
+                user_id VARCHAR(50),
+                amount DECIMAL(15, 2) NOT NULL,
+                currency VARCHAR(10) DEFAULT 'GHS',
+                status ENUM('PENDING', 'COMPLETED', 'FAILED', 'REJECTED') DEFAULT 'PENDING',
+                payment_type ENUM('DEPOSIT', 'CONTRIBUTION') DEFAULT 'DEPOSIT',
+                metadata JSON,
+                approved_by VARCHAR(50),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             )
         `);
 
@@ -338,6 +355,73 @@ app.get('/api/paystack/key', (req, res) => {
         return res.status(500).json({ error: "Public Key not configured." });
     }
     res.json({ publicKey: PUBLIC_KEY });
+});
+
+/**
+ * PLATFORM FINANCIALS: Initialize a payment record
+ * Call this before redirecting the user to Paystack
+ */
+app.post('/api/paystack/initialize-confirmation', authenticateToken, async (req, res) => {
+    const { reference, access_code, amount, payment_type, metadata } = req.body;
+    const userId = req.user.id;
+
+    try {
+        await pool.query(
+            'INSERT INTO payment_confirmations (reference, access_code, user_id, amount, payment_type, metadata) VALUES (?, ?, ?, ?, ?, ?)',
+            [reference, access_code, userId, amount, payment_type || 'DEPOSIT', JSON.stringify(metadata || {})]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Failed to log payment intent:', error);
+        res.status(500).json({ error: "Internal ledger error" });
+    }
+});
+
+/**
+ * PLATFORM FINANCIALS: Get all pending payments for Superuser review
+ */
+app.get('/api/admin/financials/pending', authenticateToken, authorizeRoles('SUPERUSER'), async (req, res) => {
+    try {
+        const [rows] = await pool.query(
+            `SELECT pc.*, u.name as userName, u.email as userEmail 
+             FROM payment_confirmations pc 
+             JOIN users u ON pc.user_id = u.id 
+             WHERE pc.status = 'PENDING' 
+             ORDER BY pc.created_at DESC`
+        );
+        res.json(rows);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * PLATFORM FINANCIALS: Superuser manual approval
+ */
+app.put('/api/admin/financials/approve-payment', authenticateToken, authorizeRoles('SUPERUSER'), async (req, res) => {
+    const { reference } = req.body;
+    const superuserId = req.user.id;
+    const connection = await pool.getConnection();
+
+    try {
+        await connection.beginTransaction();
+        
+        // 1. Mark the confirmation as completed
+        const [result] = await connection.query(
+            'UPDATE payment_confirmations SET status = "COMPLETED", approved_by = ? WHERE reference = ? AND status = "PENDING"',
+            [superuserId, reference]
+        );
+
+        if (result.affectedRows === 0) throw new Error("Payment not found or already processed.");
+
+        await connection.commit();
+        res.json({ success: true, message: "Payment reconciled and approved." });
+    } catch (error) {
+        await connection.rollback();
+        res.status(500).json({ error: error.message });
+    } finally {
+        connection.release();
+    }
 });
 
 app.post('/api/paystack/withdraw', authenticateToken, authorizeRoles('ADMIN', 'SUPERUSER'), async (req, res) => {
