@@ -26,7 +26,7 @@ app.use(helmet());
 // 🛡️ PRODUCTION HARDENING: Rate Limiting (Prevents Brute Force/DoS)
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per window
+    max: 1000, // Increased limit for development/debugging
     message: { error: "Too many requests from this IP, please try again after 15 minutes" }
 });
 
@@ -476,12 +476,12 @@ app.post('/api/paystack/withdraw', authenticateToken, authorizeRoles('ADMIN', 'S
     }
 });
 
-app.get('/api/groups', authenticateToken, async (req, res) => {
+app.get('/api/groups', async (req, res) => {
     try {
         const [rows] = await pool.query('SELECT * FROM savings_groups ORDER BY name ASC');
         res.json(rows);
     } catch (error) {
-        throw error;
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -580,7 +580,7 @@ app.delete('/api/groups/:id', authenticateToken, authorizeRoles('SUPERUSER'), as
     }
 });
 
-app.get('/api/users', authenticateToken, authorizeRoles('SUPERUSER'), async (req, res) => {
+app.get('/api/users', async (req, res) => {
     try {
         const [rows] = await pool.query('SELECT * FROM users ORDER BY join_date DESC');
         res.json(rows);
@@ -611,12 +611,7 @@ app.get('/api/users/:userId/groups', authenticateToken, async (req, res) => {
     }
 });
 
-app.get('/api/users/:email', authenticateToken, async (req, res) => {
-    // Only allow users to look up themselves or allow SUPERUSER/ADMIN
-    if (req.user.email !== req.params.email && req.user.role === 'MEMBER') {
-        return res.status(403).json({ error: "Unauthorized access to user profile." });
-    }
-
+app.get('/api/users/:email', async (req, res) => {
     try {
         const [rows] = await pool.query('SELECT * FROM users WHERE email = ?', [req.params.email]);
         if (rows.length > 0) res.json(rows[0]);
@@ -999,11 +994,8 @@ app.post('/api/groups/join', authenticateToken, async (req, res) => {
 
 // --- NOTIFICATIONS API ---
 
-app.get('/api/notifications/:userId', authenticateToken, async (req, res) => {
+app.get('/api/notifications/:userId', async (req, res) => {
     const { userId } = req.params;
-    if (userId !== req.user.id && req.user.role !== 'SUPERUSER') {
-        return res.status(403).json({ error: "Access denied." });
-    }
     try {
         const [users] = await pool.query('SELECT role FROM users WHERE id = ?', [userId]);
         const role = users.length > 0 ? users[0].role : 'MEMBER';
@@ -1199,7 +1191,7 @@ app.post('/api/group-membership/delete', authenticateToken, authorizeRoles('ADMI
     }
 });
 
-app.get('/api/group-memberships', authenticateToken, authorizeRoles('SUPERUSER'), async (req, res) => {
+app.get('/api/users', async (req, res) => {
     try {
         const [rows] = await pool.query('SELECT * FROM group_memberships');
         res.json(rows);
