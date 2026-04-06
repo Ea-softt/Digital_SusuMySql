@@ -374,23 +374,23 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Backend Status Badge */}
-      <div className="fixed top-6 left-6 z-30 flex items-center gap-2 px-3 py-1.5 rounded-full backdrop-blur-md border text-xs font-bold transition-all bg-white/10 text-white border-white/20">
-         {serverOnline === null ? (
-             <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> <span>Connecting...</span></>
-         ) : serverOnline ? (
-             <><Database className="w-3.5 h-3.5 text-green-400" /> <span className="text-green-400">MySQL Online</span></>
-         ) : (
-             <><Server className="w-3.5 h-3.5 text-red-400 animate-pulse" /> <span className="text-red-400">Backend Offline</span></>
-         )}
-      </div>
-
       <div className="absolute inset-0 w-full h-full bg-primary-900 overflow-hidden z-0">
         <div className="hidden lg:flex flex-col justify-between h-full p-16 relative z-10 pointer-events-none">
             <div className="animate-fade-in-down">
-                <div className="flex items-center gap-3 mb-10"><div className="bg-white/10 p-3 rounded-2xl backdrop-blur-md border border-white/20 shadow-lg"><Wallet className="w-8 h-8 text-white" /></div><h1 className="text-3xl font-bold tracking-tight text-white">Digital Susu</h1></div>
-                <h2 className="text-5xl font-extrabold leading-tight mb-6 text-white">Real-Time<br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-200 to-white">MySQL Ledger.</span></h2>
-                <p className="text-primary-100 text-lg max-w-md leading-relaxed">Connected directly to your local database for persistent savings management.</p>
+                <div className="flex items-center gap-3 mb-10"><div className="bg-white/10 p-3 rounded-2xl backdrop-blur-md border border-white/20 shadow-lg"><Wallet className="w-8 h-8 text-white" /></div><h1 className="text-3xl font-bold tracking-tight text-white">Secure Susu</h1></div>
+                <h2 className="text-5xl font-extrabold leading-tight mb-6 text-white">Achieve Goals<br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-200 to-white">Together.</span></h2>
+                <p className="text-primary-100 text-lg max-w-md leading-relaxed">Join a trusted community of savers. Grow your wealth through organized, secure, and transparent contributions.</p>
+                
+                <div className="mt-12 space-y-6">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center border border-green-500/30"><ShieldCheck className="w-6 h-6 text-green-400" /></div>
+                        <div><h4 className="text-white font-bold">Verified Security</h4><p className="text-primary-200 text-sm">Your data and funds are protected with industrial-grade encryption and KYC verification.</p></div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center border border-blue-500/30"><TrendingUp className="w-6 h-6 text-blue-400" /></div>
+                        <div><h4 className="text-white font-bold">Community Trust</h4><p className="text-primary-200 text-sm">Automated tracking ensures every member stays accountable and reliable.</p></div>
+                    </div>
+                </div>
             </div>
         </div>
       </div>
