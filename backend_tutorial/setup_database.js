@@ -4,6 +4,7 @@
  */
 
 import mysql from 'mysql2/promise';
+import bcrypt from 'bcrypt';
 
 const dbConfig = {
     host: process.env.DB_HOST || 'localhost',
@@ -29,6 +30,7 @@ async function setupDatabase() {
                 id VARCHAR(50) PRIMARY KEY,
                 name VARCHAR(100) NOT NULL,
                 email VARCHAR(100) UNIQUE NOT NULL,
+                password VARCHAR(255),
                 phone_number VARCHAR(20),
                 role ENUM('MEMBER', 'ADMIN', 'SUPERUSER') DEFAULT 'MEMBER',
                 avatar LONGTEXT,
@@ -149,6 +151,21 @@ async function setupDatabase() {
             } else {
                 throw e;
             }
+        }
+
+        console.log('🌱 Checking for System Administrator...');
+        const [adminExists] = await connection.query('SELECT id FROM users WHERE email = "admin@system.com"');
+        
+        if (adminExists.length === 0) {
+            console.log('🚧 Seeding admin@system.com with password: admin123');
+            // Hash the password with 10 rounds of salt
+            const hashed = await bcrypt.hash('admin123', 10);
+            
+            await connection.query(`
+                INSERT INTO users (id, name, email, password, role, status, verification_status, avatar)
+                VALUES ('u0', 'System Admin', 'admin@system.com', ?, 'SUPERUSER', 'ACTIVE', 'VERIFIED', 'https://ui-avatars.com/api/?name=Admin&background=111827&color=fff')
+            `, [hashed]);
+            console.log('✅ Admin user created successfully.');
         }
 
         console.log('✅ Database setup complete!');

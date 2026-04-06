@@ -13,6 +13,7 @@ class DatabaseService {
   private messages: GroupMessage[] = [];
   private auditLogs: AuditLog[] = [];
   private memberships: GroupMembership[] = [];
+  private token: string | null = localStorage.getItem('susu_jwt_token');
   private isServerOnline: boolean | null = null;
   private systemConfig: SystemConfig = {
     defaultCurrency: 'GHS',
@@ -23,6 +24,17 @@ class DatabaseService {
 
   constructor() {
     this.syncData();
+  }
+
+  private async apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
+    const headers = {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    };
+    if (this.token) {
+      (headers as any)['Authorization'] = `Bearer ${this.token}`;
+    }
+    return fetch(`${API_BASE}${path}`, { ...options, headers });
   }
 
   private isValidImage(str?: string): boolean {
@@ -110,7 +122,7 @@ class DatabaseService {
 
   async syncData(userId?: string, activeGroupId?: string): Promise<boolean> {
     try {
-      const healthRes = await fetch(`${API_BASE}/check-health`, { 
+      const healthRes = await this.apiFetch(`/check-health`, { 
           signal: AbortSignal.timeout(3000) 
       }).catch(() => null);
       
@@ -121,7 +133,7 @@ class DatabaseService {
 
       this.isServerOnline = true;
       
-      const usersRes = await fetch(`${API_BASE}/users`);
+      const usersRes = await this.apiFetch(`/users`);
       if (usersRes.ok) {
         const remoteUsers = await usersRes.json();
         this.members = Array.isArray(remoteUsers) ? remoteUsers.map((u: any) => this.mapUser(u)) : [];
@@ -131,33 +143,32 @@ class DatabaseService {
 
       if (userId) {
           if (currentUser && currentUser.role === UserRole.SUPERUSER) {
-              const allGroupsRes = await fetch(`${API_BASE}/groups`);
+              const allGroupsRes = await this.apiFetch(`/groups`);
               if (allGroupsRes.ok) {
                   const remoteGroups = await allGroupsRes.json();
                   this.groups = Array.isArray(remoteGroups) ? remoteGroups.map((g: any) => this.mapGroup(g)) : [];
               }
 
-              const allTxRes = await fetch(`${API_BASE}/transactions`);
+              const allTxRes = await this.apiFetch(`/transactions`);
               if (allTxRes.ok) {
                   const remoteTxs = await allTxRes.json();
                   this.transactions = Array.isArray(remoteTxs) ? remoteTxs.map((t: any) => this.mapTransaction(t)) : [];
               }
           } else {
-              const groupsRes = await fetch(`${API_BASE}/users/${userId}/groups`);
+              const groupsRes = await this.apiFetch(`/users/${userId}/groups`);
               if (groupsRes.ok) {
                   const remoteGroups = await groupsRes.json();
                   this.groups = Array.isArray(remoteGroups) ? remoteGroups.map((g: any) => this.mapGroup(g)) : [];
               }
 
-              const url = `${API_BASE}/transactions/${userId}`;
-              const txRes = await fetch(url);
+              const txRes = await this.apiFetch(`/transactions/${userId}`);
               if (txRes.ok) {
                   const remoteTxs = await txRes.json();
                   this.transactions = Array.isArray(remoteTxs) ? remoteTxs.map((t: any) => this.mapTransaction(t)) : [];
               }
           }
       } else {
-          const allGroupsRes = await fetch(`${API_BASE}/groups`);
+          const allGroupsRes = await this.apiFetch(`/groups`);
           if (allGroupsRes.ok) {
               const remoteGroups = await allGroupsRes.json();
               this.groups = Array.isArray(remoteGroups) ? remoteGroups.map((g: any) => this.mapGroup(g)) : [];
@@ -174,48 +185,34 @@ class DatabaseService {
       return this.isServerOnline;
   }
 
-  async authenticate(email: string): Promise<User | undefined> {
-    // Emergency fallback for first-time use or system recovery
-    if (email.toLowerCase() === 'admin@system.com') {
-        console.log("Using emergency system administrator login.");
-        return {
-            id: 'u-system-admin',
-            name: 'System Administrator',
-            email: 'admin@system.com',
-            phoneNumber: '0000000000',
-            role: UserRole.SUPERUSER,
-            avatar: `https://ui-avatars.com/api/?name=System+Admin&background=111827&color=fff`,
-            status: 'ACTIVE',
-            verificationStatus: 'VERIFIED',
-            joinDate: new Date().toISOString().split('T')[0],
-            reliabilityScore: 100,
-            memberships: []
-        };
-    }
-
+  async login(email: string, password: string): Promise<User | undefined> {
     try {
-        const res = await fetch(`${API_BASE}/users/${encodeURIComponent(email)}`, {
-          signal: AbortSignal.timeout(4000)
+        const res = await this.apiFetch(`/auth/login`, {
+            method: 'POST',
+            body: JSON.stringify({ email, password })
         });
         if (res.ok) {
-            const u = await res.json();
+            const data = await res.json();
+            this.token = data.token;
+            localStorage.setItem('susu_jwt_token', data.token);
+            
+            // Lookup full profile
+            const userRes = await this.apiFetch(`/users/${encodeURIComponent(email)}`);
+            const u = await userRes.json();
             const user = this.mapUser(u);
             await this.syncData(user.id);
             return user;
         }
-    } catch (e) {
-        console.warn("Server auth unreachable", e);
-    }
-    return this.members.find(m => m.email.toLowerCase() === email.toLowerCase());
+    } catch (e) { console.error(e); }
+    return undefined;
   }
 
-  async registerUser(user: User): Promise<User> {
+  async registerUser(user: User, password: string): Promise<User> {
     if (!this.isServerOnline) await this.syncData();
     if (this.isServerOnline) {
         try {
-            const res = await fetch(`${API_BASE}/users`, {
+            const res = await this.apiFetch(`/auth/register`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     id: user.id,
                     name: user.name,
@@ -225,10 +222,14 @@ class DatabaseService {
                     avatar: user.avatar,
                     occupation: user.occupation,
                     location: user.location,
-                    kycId: user.kycId
+                    kycId: user.kycId,
+                    password
                 })
             });
             if (res.ok) {
+                const data = await res.json();
+                this.token = data.token;
+                localStorage.setItem('susu_jwt_token', data.token);
                 await this.syncData(user.id);
                 return user;
             }
@@ -239,12 +240,17 @@ class DatabaseService {
     throw new Error("Server is offline.");
   }
 
+  logout() {
+      this.token = null;
+      localStorage.removeItem('susu_jwt_token');
+      localStorage.removeItem('susu_auth_session_email');
+  }
+
   async inviteMember(emailOrPhone: string): Promise<boolean> {
     if (this.isServerOnline) {
         try {
-            const res = await fetch(`${API_BASE}/users/invite`, {
+            const res = await this.apiFetch(`/users/invite`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email: emailOrPhone })
             });
             if (res.ok) {
@@ -259,9 +265,8 @@ class DatabaseService {
   async updateUser(userId: string, updates: Partial<User>): Promise<User | null> {
     if (this.isServerOnline) {
         try {
-            const res = await fetch(`${API_BASE}/users/${userId}`, {
+            const res = await this.apiFetch(`/users/${userId}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(updates)
             });
             if (res.ok) await this.syncData(userId);
@@ -273,7 +278,7 @@ class DatabaseService {
   async deleteUser(userId: string): Promise<boolean> {
     if (this.isServerOnline) {
         try {
-            const res = await fetch(`${API_BASE}/users/${userId}`, { method: 'DELETE' });
+            const res = await this.apiFetch(`/users/${userId}`, { method: 'DELETE' });
             if (res.ok) {
                 await this.syncData();
                 return true;
@@ -301,9 +306,8 @@ class DatabaseService {
 
     if (this.isServerOnline) {
         try {
-            await fetch(`${API_BASE}/groups`, {
+            await this.apiFetch(`/groups`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(newGroupData)
             });
             await this.syncData(data.creatorId);
@@ -327,9 +331,8 @@ class DatabaseService {
   async updateGroup(groupId: string, data: Partial<Group>): Promise<Group | null> {
     if (this.isServerOnline) {
         try {
-            const res = await fetch(`${API_BASE}/groups/${groupId}`, {
+            const res = await this.apiFetch(`/groups/${groupId}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     name: data.name,
                     contributionAmount: data.contributionAmount,
@@ -360,9 +363,8 @@ class DatabaseService {
   async updateGroupStatus(groupId: string, status: 'ACTIVE' | 'REJECTED' | 'SUSPENDED', approvedBy?: string): Promise<Group | null> {
     if (this.isServerOnline) {
         try {
-            const res = await fetch(`${API_BASE}/groups/${groupId}/status`, {
+            const res = await this.apiFetch(`/groups/${groupId}/status`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status, approvedBy })
             });
             if (res.ok) {
@@ -377,9 +379,8 @@ class DatabaseService {
   async joinGroupRequest(userId: string, inviteCode: string): Promise<{ success: boolean, message: string }> {
     if (this.isServerOnline) {
         try {
-            const res = await fetch(`${API_BASE}/groups/join`, {
+            const res = await this.apiFetch(`/groups/join`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId, inviteCode })
             });
             const data = await res.json();
@@ -398,9 +399,8 @@ class DatabaseService {
   async addTransaction(transaction: Transaction, groupId?: string | null): Promise<void> {
     if (this.isServerOnline) {
         try {
-            await fetch(`${API_BASE}/transactions`, {
+            await this.apiFetch(`/transactions`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     id: transaction.id,
                     userId: transaction.userId,
@@ -419,7 +419,7 @@ class DatabaseService {
   async getPendingVerifications(userId: string): Promise<Transaction[]> {
     if (!this.isServerOnline) return [];
     try {
-        const res = await fetch(`${API_BASE}/transactions/verification-pending/${userId}`);
+        const res = await this.apiFetch(`/transactions/verification-pending/${userId}`);
         if (res.ok) {
             const remoteTxs = await res.json();
             return Array.isArray(remoteTxs) ? remoteTxs.map((t: any) => this.mapTransaction(t)) : [];
@@ -432,12 +432,21 @@ class DatabaseService {
 
   async verifyTransaction(txId: string): Promise<boolean> {
       if (this.isServerOnline) {
-          const res = await fetch(`${API_BASE}/transactions/${txId}/verify`, { method: 'PUT' });
+          const res = await this.apiFetch(`/transactions/${txId}/verify`, { method: 'PUT' });
           return res.ok;
       }
       return false;
   }
 
+  async getGroupMemberships(): Promise<GroupMembership[]> {
+    if (this.isServerOnline) {
+      try {
+        const res = await this.apiFetch(`/group-memberships`);
+        if (res.ok) return await res.json();
+      } catch (e) { console.error(e); }
+    }
+    return [];
+  }
   getSystemConfig(): SystemConfig { return { ...this.systemConfig }; }
   getGroup(): Group | null { return this.groups[0] || null; }
   getGroups(): Group[] { return [...this.groups]; }

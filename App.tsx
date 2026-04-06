@@ -83,14 +83,8 @@ const App: React.FC = () => {
     const restoreSession = async () => {
       const savedEmail = localStorage.getItem(SESSION_KEY);
       if (savedEmail) {
-        try {
-          const user = await db.authenticate(savedEmail);
-          if (user) {
-            handleLogin(user, true); // true indicates we are restoring
-          }
-        } catch (err) {
-          console.error("Failed to restore session", err);
-        }
+        // We assume the token is still in localStorage and syncData handles it
+        // For full session verification, we'd hit a /api/auth/me route here.
       }
       setIsRestoringSession(false);
       refreshData();
@@ -171,6 +165,7 @@ const App: React.FC = () => {
   };
 
   const handleLogout = () => {
+    db.logout();
     localStorage.removeItem(SESSION_KEY);
     localStorage.removeItem(LAST_GROUP_KEY);
     setCurrentUser(null);
@@ -201,7 +196,7 @@ const App: React.FC = () => {
 
     if (authMode === 'login') {
       try {
-          const existingUser = await db.authenticate(email);
+          const existingUser = await db.login(email, password);
           if (existingUser) {
               handleLogin(existingUser);
           } else {
@@ -239,7 +234,7 @@ const App: React.FC = () => {
       };
 
       try {
-          await db.registerUser(newUser);
+          await db.registerUser(newUser, password);
           handleLogin(newUser);
           setNotification({ type: 'info', message: 'Registration successful! Your account is pending verification by the system administrator.' });
       } catch (err) {
