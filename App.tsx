@@ -47,6 +47,8 @@ const App: React.FC = () => {
   const [idFrontImage, setIdFrontImage] = useState<string | null>(null);
   const [idBackImage, setIdBackImage] = useState<string | null>(null);
   const [cameraMode, setCameraMode] = useState<'profile' | 'idFront' | 'idBack'>('profile');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<{ status: 'ok' | 'bad'; message: string } | null>(null);
   
   const [isLoading, setIsLoading] = useState(false);
   const [isRestoringSession, setIsRestoringSession] = useState(true);
@@ -139,7 +141,7 @@ const App: React.FC = () => {
     else document.documentElement.classList.remove('dark');
   }, [isDarkMode]);
 
-  const handleTakePhoto = () => {
+  const handleTakePhoto = async () => {
     if (videoRef.current && canvasRef.current) {
       const context = canvasRef.current.getContext('2d');
       if (context) {
@@ -147,15 +149,45 @@ const App: React.FC = () => {
         canvasRef.current.height = videoRef.current.videoHeight;
         context.drawImage(videoRef.current, 0, 0);
         const dataUrl = canvasRef.current.toDataURL('image/png');
-        if (cameraMode === 'profile') setProfileImage(dataUrl);
-        else if (cameraMode === 'idFront') setIdFrontImage(dataUrl);
-        else if (cameraMode === 'idBack') setIdBackImage(dataUrl);
-        setIsCameraOpen(false);
+        
+        setIsAnalyzing(true);
+        setAnalysisResult(null);
+
+        // 🤖 Simulate Intelligent Image Analysis
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        // Randomly simulate pass/fail for demo purposes
+        const isQualityOk = Math.random() > 0.2; 
+        
+        if (isQualityOk) {
+            setAnalysisResult({ status: 'ok', message: 'Perfect! Image is clear and well-framed.' });
+            setTimeout(() => {
+                if (cameraMode === 'profile') setProfileImage(dataUrl);
+                else if (cameraMode === 'idFront') setIdFrontImage(dataUrl);
+                else if (cameraMode === 'idBack') setIdBackImage(dataUrl);
+                setIsCameraOpen(false);
+                setIsAnalyzing(false);
+                setAnalysisResult(null);
+            }, 1000);
+        } else {
+            const errors = [
+                'Image is too blurry. Please hold steady.',
+                'Poor lighting detected. Move to a brighter area.',
+                'Subject not centered. Align with the frame.'
+            ];
+            setAnalysisResult({ 
+                status: 'bad', 
+                message: errors[Math.floor(Math.random() * errors.length)] 
+            });
+            setIsAnalyzing(false);
+        }
       }
     }
   };
 
   const openCamera = (mode: 'profile' | 'idFront' | 'idBack') => {
+      setAnalysisResult(null);
+      setIsAnalyzing(false);
       setCameraMode(mode);
       setIsCameraOpen(true);
   };
@@ -399,12 +431,32 @@ const App: React.FC = () => {
                 </div>
              </div>
 
+             {/* 🤖 Analysis Overlay */}
+             {(isAnalyzing || analysisResult) && (
+                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
+                    {isAnalyzing ? (
+                        <>
+                            <RefreshCw className="w-12 h-12 text-primary-400 animate-spin mb-4" />
+                            <h3 className="text-white font-bold text-lg">Analyzing Quality...</h3>
+                            <p className="text-gray-300 text-sm mt-2">Checking focus, lighting, and alignment</p>
+                        </>
+                    ) : (
+                        <div className="animate-fade-in">
+                            {analysisResult?.status === 'ok' ? <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" /> : <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />}
+                            <h3 className={`text-xl font-bold ${analysisResult?.status === 'ok' ? 'text-green-400' : 'text-red-400'}`}>{analysisResult?.status === 'ok' ? 'Verification Passed' : 'Verification Failed'}</h3>
+                            <p className="text-white mt-2">{analysisResult?.message}</p>
+                            {analysisResult?.status === 'bad' && <button onClick={() => setAnalysisResult(null)} className="mt-6 px-6 py-2 bg-white text-black rounded-full font-bold text-sm">Try Again</button>}
+                        </div>
+                    )}
+                </div>
+             )}
+
              <canvas ref={canvasRef} className="hidden" />
              <button onClick={() => setIsCameraOpen(false)} className="absolute top-4 right-4 bg-gray-800/80 text-white p-3 rounded-full hover:bg-gray-700 transition-colors backdrop-blur-sm">
                 <X className="w-6 h-6" />
              </button>
              <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-black via-black/80 to-transparent flex justify-center">
-                <button onClick={handleTakePhoto} className="w-20 h-20 rounded-full bg-white border-4 border-gray-300 hover:border-primary-500 hover:scale-105 transition-all flex items-center justify-center shadow-lg">
+                <button disabled={isAnalyzing || !!analysisResult} onClick={handleTakePhoto} className={`w-20 h-20 rounded-full border-4 transition-all flex items-center justify-center shadow-lg ${isAnalyzing || analysisResult ? 'bg-gray-600 border-gray-700 cursor-not-allowed' : 'bg-white border-gray-300 hover:border-primary-500 hover:scale-105'}`}>
                     <div className="w-16 h-16 rounded-full bg-gray-100 border-2 border-gray-300"></div>
                 </button>
              </div>
