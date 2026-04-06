@@ -290,6 +290,8 @@ const App: React.FC = () => {
           kycDocumentBack: idBackImage,
           status: 'PENDING',
           verificationStatus: 'PENDING',
+          // Simulated KYC Verification flag
+          isFaceVerified: true, 
           joinDate: new Date().toISOString().split('T')[0],
           reliabilityScore: 100,
           memberships: []
@@ -384,6 +386,19 @@ const App: React.FC = () => {
         <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4">
           <div className="relative w-full max-w-md bg-black rounded-3xl overflow-hidden shadow-2xl border border-gray-800">
              <video ref={videoRef} autoPlay playsInline muted className={`w-full h-[400px] object-cover ${cameraMode === 'profile' ? 'transform scale-x-[-1]' : ''}`} />
+             
+             {/* 🛡️ KYC Guided Overlays */}
+             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                {cameraMode === 'profile' ? (
+                    <div className="w-64 h-64 border-4 border-green-500 rounded-full shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]"></div>
+                ) : (
+                    <div className="w-[85%] h-[55%] border-2 border-dashed border-white rounded-2xl shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]"></div>
+                )}
+                <div className="absolute bottom-24 text-white text-center font-bold text-xs bg-black/50 px-4 py-2 rounded-xl backdrop-blur-md border border-white/10">
+                    {cameraMode === 'profile' ? 'Center your face in the green circle' : 'Align ID Card within the frame'}
+                </div>
+             </div>
+
              <canvas ref={canvasRef} className="hidden" />
              <button onClick={() => setIsCameraOpen(false)} className="absolute top-4 right-4 bg-gray-800/80 text-white p-3 rounded-full hover:bg-gray-700 transition-colors backdrop-blur-sm">
                 <X className="w-6 h-6" />
@@ -439,18 +454,30 @@ const App: React.FC = () => {
                                 <button type="button" onClick={() => setRegisterRole(UserRole.MEMBER)} className={`p-4 rounded-xl border flex flex-col items-center gap-2 transition-all ${registerRole === UserRole.MEMBER ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-500'}`}><Users className="w-6 h-6" /><span className="text-sm font-bold">Member</span></button>
                                 <button type="button" onClick={() => setRegisterRole(UserRole.ADMIN)} className={`p-4 rounded-xl border flex flex-col items-center gap-2 transition-all ${registerRole === UserRole.ADMIN ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-500'}`}><Crown className="w-6 h-6" /><span className="text-sm font-bold">Leader</span></button>
                             </div>
-                            <div className="grid grid-cols-3 gap-4 mb-6">
-                                <div className="flex flex-col items-center gap-1">
-                                    <div className={`w-16 h-16 rounded-full flex items-center justify-center overflow-hidden border-2 cursor-pointer ${profileImage ? 'border-primary-500' : 'border-gray-300 bg-gray-50'}`} onClick={() => openCamera('profile')}>{profileImage ? <img src={profileImage} alt="" className="w-full h-full object-cover" /> : <UserIcon className="w-6 h-6 text-gray-400" />}</div>
-                                    <span className="text-[10px] font-bold text-gray-500">Avatar</span>
+                            <div className="space-y-4 mb-6">
+                                <div className="flex justify-center">
+                                    <div className="relative group">
+                                        <div className={`w-24 h-24 rounded-full flex items-center justify-center overflow-hidden border-4 cursor-pointer transition-all ${profileImage ? 'border-green-500 shadow-lg shadow-green-500/20' : 'border-gray-200 bg-gray-50 hover:border-primary-400'}`} onClick={() => openCamera('profile')}>
+                                            {profileImage ? <img src={profileImage} alt="" className="w-full h-full object-cover" /> : <UserIcon className="w-10 h-10 text-gray-300" />}
+                                            <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><Camera className="w-6 h-6 text-white" /></div>
+                                        </div>
+                                        {profileImage && <div className="absolute -bottom-1 -right-1 bg-green-500 text-white rounded-full p-1.5 border-2 border-white"><ShieldCheck className="w-3.5 h-3.5" /></div>}
+                                    </div>
                                 </div>
-                                <div className="flex flex-col items-center gap-1">
-                                    <div className={`w-16 h-16 rounded-xl flex items-center justify-center overflow-hidden border-2 cursor-pointer ${idFrontImage ? 'border-primary-500' : 'border-gray-300 bg-gray-50'}`} onClick={() => openCamera('idFront')}>{idFrontImage ? <img src={idFrontImage} alt="" className="w-full h-full object-cover" /> : <Camera className="w-6 h-6 text-gray-400" />}</div>
-                                    <span className="text-[10px] font-bold text-gray-500">ID Front</span>
-                                </div>
-                                <div className="flex flex-col items-center gap-1">
-                                    <div className={`w-16 h-16 rounded-xl flex items-center justify-center overflow-hidden border-2 cursor-pointer ${idBackImage ? 'border-primary-500' : 'border-gray-300 bg-gray-50'}`} onClick={() => openCamera('idBack')}>{idBackImage ? <img src={idBackImage} alt="" className="w-full h-full object-cover" /> : <Camera className="w-6 h-6 text-gray-400" />}</div>
-                                    <span className="text-[10px] font-bold text-gray-500">ID Back</span>
+                                
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="flex flex-col gap-2">
+                                        <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Ghana Card Front</label>
+                                        <div className={`aspect-[3/2] w-full rounded-2xl flex items-center justify-center overflow-hidden border-2 border-dashed cursor-pointer transition-all ${idFrontImage ? 'border-green-500 bg-green-50' : 'border-gray-200 bg-gray-50 hover:border-primary-400'}`} onClick={() => openCamera('idFront')}>
+                                            {idFrontImage ? <img src={idFrontImage} alt="" className="w-full h-full object-cover" /> : <FileText className="w-8 h-8 text-gray-300" />}
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col gap-2">
+                                        <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Ghana Card Back</label>
+                                        <div className={`aspect-[3/2] w-full rounded-2xl flex items-center justify-center overflow-hidden border-2 border-dashed cursor-pointer transition-all ${idBackImage ? 'border-green-500 bg-green-50' : 'border-gray-200 bg-gray-50 hover:border-primary-400'}`} onClick={() => openCamera('idBack')}>
+                                            {idBackImage ? <img src={idBackImage} alt="" className="w-full h-full object-cover" /> : <FileText className="w-8 h-8 text-gray-300" />}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                             <div className="space-y-4">
