@@ -96,6 +96,18 @@ const schemas = {
         kycId: Joi.string().allow('', null),
         kycDocumentImage: Joi.string().allow('', null)
     }),
+    createGroup: Joi.object({
+        id: Joi.string().required(),
+        name: Joi.string().min(3).required(),
+        contributionAmount: Joi.number().positive().required(),
+        currency: Joi.string().length(3).default('GHS'),
+        frequency: Joi.string().valid('Daily', 'Weekly', 'Bi-Weekly', 'Monthly', 'Yearly').required(),
+        inviteCode: Joi.string().required(),
+        welcomeMessage: Joi.string().allow('', null),
+        icon: Joi.string().allow('', null),
+        scheduledPayoutAmount: Joi.number().min(0),
+        creatorId: Joi.string()
+    }),
     login: Joi.object({
         email: Joi.string().email().required(),
         password: Joi.string().required()
@@ -586,7 +598,7 @@ app.get('/api/groups', authenticateToken, async (req, res, next) => {
     }
 });
 
-app.post('/api/groups', authenticateToken, async (req, res) => {
+app.post('/api/groups', authenticateToken, validate(schemas.createGroup), async (req, res, next) => {
     // Use the ID from the token, not the request body
     const creatorId = req.user.id;
     const { id, name, contributionAmount, currency, frequency, inviteCode, welcomeMessage, icon, scheduledPayoutAmount } = req.body;
@@ -606,7 +618,6 @@ app.post('/api/groups', authenticateToken, async (req, res) => {
         res.json({ success: true });
     } catch (error) {
         await connection.rollback();
-        console.error('Group creation failed:', error);
         next(error);
     } finally {
         connection.release();
@@ -830,7 +841,7 @@ app.put('/api/transactions/:id/rollback', async (req, res) => {
         await pool.query('UPDATE transactions SET is_rolled_back = 1 WHERE id = ?', [id]);
         res.json({ success: true });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        next(error);
     }
 });
 
@@ -859,7 +870,7 @@ app.get('/api/transactions/verification-pending/:userId', authenticateToken, asy
         );
         res.json(rows);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        next(error);
     }
 });
 
@@ -892,18 +903,18 @@ app.put('/api/transactions/:id/verify', authenticateToken, authorizeRoles('ADMIN
         res.json({ success: true });
     } catch (error) {
         await connection.rollback();
-        res.status(500).json({ error: error.message });
+        next(error);
     } finally {
         connection.release();
     }
 });
 
-app.get('/api/transactions', authenticateToken, authorizeRoles('SUPERUSER'), async (req, res) => {
+app.get('/api/transactions', authenticateToken, authorizeRoles('SUPERUSER'), async (req, res, next) => {
     try {
         const [rows] = await pool.query('SELECT t.*, u.name as userName FROM transactions t LEFT JOIN users u ON t.user_id = u.id ORDER BY t.date DESC');
         res.json(rows);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        next(error);
     }
 });
 

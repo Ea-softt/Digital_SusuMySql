@@ -4,7 +4,6 @@
  */
 
 import mysql from 'mysql2/promise';
-import bcrypt from 'bcrypt';
 
 const dbConfig = {
     host: process.env.DB_HOST || 'localhost',

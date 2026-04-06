@@ -143,7 +143,7 @@ class DatabaseService {
 
       if (userId) {
           if (currentUser && currentUser.role === UserRole.SUPERUSER) {
-              const allGroupsRes = await this.apiFetch(`/groups`);
+              const allGroupsRes = await this.apiFetch(`/groups`, { signal: AbortSignal.timeout(4000) });
               if (allGroupsRes.ok) {
                   const remoteGroups = await allGroupsRes.json();
                   this.groups = Array.isArray(remoteGroups) ? remoteGroups.map((g: any) => this.mapGroup(g)) : [];
@@ -187,8 +187,9 @@ class DatabaseService {
 
   async login(email: string, password: string): Promise<User | undefined> {
     try {
-        const res = await this.apiFetch(`/auth/login`, {
+        const res = await fetch(`${API_BASE}/auth/login`, {
             method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password })
         });
         if (res.ok) {
