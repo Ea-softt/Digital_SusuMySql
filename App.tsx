@@ -141,26 +141,67 @@ const App: React.FC = () => {
     else document.documentElement.classList.remove('dark');
   }, [isDarkMode]);
 
+  // 🛡️ Intelligent Image Quality Analysis
+  const analyzeImageQuality = (canvas: HTMLCanvasElement) => {
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return { status: 'bad' as const, message: 'Processing error.' };
+
+    const { width, height } = canvas;
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const data = imageData.data;
+    
+    let totalBrightness = 0;
+    let edgeScore = 0;
+
+    // Sample pixels to determine brightness and focus (Laplacian variance proxy)
+    for (let i = 0; i < data.length; i += 4) {
+        const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        totalBrightness += avg;
+
+        if (i < data.length - 4) {
+            const nextAvg = (data[i + 4] + data[i + 5] + data[i + 6]) / 3;
+            edgeScore += Math.abs(avg - nextAvg);
+        }
+    }
+
+    const brightness = totalBrightness / (width * height);
+    const clarity = edgeScore / (width * height);
+
+    // Strict thresholds: Only accept high clarity and balanced lighting
+    if (brightness < 60) return { status: 'bad' as const, message: 'Subject is too dark. Increase lighting.' };
+    if (brightness > 225) return { status: 'bad' as const, message: 'Subject is overexposed. Reduce glare.' };
+    if (clarity < 22) return { status: 'bad' as const, message: 'Image is too blurry. Hold steady and ensure focus.' };
+
+    return { status: 'ok' as const, message: 'Perfect! Image is clear and well-positioned.' };
+  };
+
   const handleTakePhoto = async () => {
     if (videoRef.current && canvasRef.current) {
       const context = canvasRef.current.getContext('2d');
       if (context) {
         canvasRef.current.width = videoRef.current.videoWidth;
         canvasRef.current.height = videoRef.current.videoHeight;
+        
+        // Ensure capture orientation matches preview
+        if (cameraMode === 'profile') {
+            context.translate(canvasRef.current.width, 0);
+            context.scale(-1, 1);
+        }
         context.drawImage(videoRef.current, 0, 0);
+        context.setTransform(1, 0, 0, 1, 0, 0);
+
         const dataUrl = canvasRef.current.toDataURL('image/png');
         
         setIsAnalyzing(true);
         setAnalysisResult(null);
 
-        // 🤖 Simulate Intelligent Image Analysis
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        // Processing delay to simulate AI analysis
+        await new Promise(resolve => setTimeout(resolve, 1200));
         
-        // Randomly simulate pass/fail for demo purposes
-        const isQualityOk = Math.random() > 0.2; 
-        
-        if (isQualityOk) {
-            setAnalysisResult({ status: 'ok', message: 'Perfect! Image is clear and well-framed.' });
+        const result = analyzeImageQuality(canvasRef.current);
+        setAnalysisResult(result);
+
+        if (result.status === 'ok') {
             setTimeout(() => {
                 if (cameraMode === 'profile') setProfileImage(dataUrl);
                 else if (cameraMode === 'idFront') setIdFrontImage(dataUrl);
@@ -170,15 +211,6 @@ const App: React.FC = () => {
                 setAnalysisResult(null);
             }, 1000);
         } else {
-            const errors = [
-                'Image is too blurry. Please hold steady.',
-                'Poor lighting detected. Move to a brighter area.',
-                'Subject not centered. Align with the frame.'
-            ];
-            setAnalysisResult({ 
-                status: 'bad', 
-                message: errors[Math.floor(Math.random() * errors.length)] 
-            });
             setIsAnalyzing(false);
         }
       }
