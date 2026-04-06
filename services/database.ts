@@ -235,9 +235,12 @@ class DatabaseService {
                 localStorage.setItem('susu_jwt_token', data.token);
                 await this.syncData(user.id);
                 return user;
+            } else {
+                const err = await res.json();
+                throw new Error(err.error || "Registration failed.");
             }
         } catch (e) {
-            throw new Error("Registration failed.");
+            throw e;
         }
     }
     throw new Error("Server is offline.");

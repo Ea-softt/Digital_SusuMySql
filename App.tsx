@@ -102,6 +102,29 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // 📸 Camera Stream Management
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+    
+    const startCamera = async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: cameraMode === 'profile' ? 'user' : 'environment' } 
+        });
+        if (videoRef.current) videoRef.current.srcObject = stream;
+      } catch (err) {
+        console.error("Camera access error:", err);
+        setNotification({ type: 'error', message: 'Could not access camera. Please check browser permissions.' });
+        setIsCameraOpen(false);
+      }
+    };
+
+    if (isCameraOpen) startCamera();
+    return () => {
+      if (stream) stream.getTracks().forEach(track => track.stop());
+    };
+  }, [isCameraOpen, cameraMode]);
+
   useEffect(() => {
       if (currentUser && activeGroup) {
           const scoped = db.getScopedUser(currentUser.id, activeGroup.id);
@@ -360,7 +383,7 @@ const App: React.FC = () => {
       {isCameraOpen && (
         <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4">
           <div className="relative w-full max-w-md bg-black rounded-3xl overflow-hidden shadow-2xl border border-gray-800">
-             <video ref={videoRef} autoPlay playsInline muted className="w-full h-[400px] object-cover transform scale-x-[-1]" />
+             <video ref={videoRef} autoPlay playsInline muted className={`w-full h-[400px] object-cover ${cameraMode === 'profile' ? 'transform scale-x-[-1]' : ''}`} />
              <canvas ref={canvasRef} className="hidden" />
              <button onClick={() => setIsCameraOpen(false)} className="absolute top-4 right-4 bg-gray-800/80 text-white p-3 rounded-full hover:bg-gray-700 transition-colors backdrop-blur-sm">
                 <X className="w-6 h-6" />
