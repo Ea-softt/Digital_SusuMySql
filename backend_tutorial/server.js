@@ -87,14 +87,15 @@ const schemas = {
         id: Joi.string().required(),
         name: Joi.string().min(3).required(),
         email: Joi.string().email().required(),
-        password: Joi.string().min(6).required(),
-        phoneNumber: Joi.string().allow('', null),
+        password: Joi.string().pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/).required(),
+        phoneNumber: Joi.string().length(10).pattern(/^[0-9]+$/).required(),
         role: Joi.string().valid('MEMBER', 'ADMIN').default('MEMBER'),
         avatar: Joi.string().allow('', null),
-        occupation: Joi.string().allow('', null),
+        occupation: Joi.string().min(2).required(),
         location: Joi.string().allow('', null),
-        kycId: Joi.string().allow('', null),
-        kycDocumentImage: Joi.string().allow('', null)
+        kycId: Joi.string().pattern(/^GHA-\d{9}-\d$/).required(),
+        kycDocumentFront: Joi.string().required(),
+        kycDocumentBack: Joi.string().required()
     }),
     createGroup: Joi.object({
         id: Joi.string().required(),
@@ -192,6 +193,15 @@ async function initializeDatabase() {
                 reliability_score INT DEFAULT 100
             )
         `);
+        const [kycFrontCols] = await connection.query(`SHOW COLUMNS FROM users LIKE 'kyc_document_front'`);
+        if (kycFrontCols.length === 0) {
+            await connection.query(`ALTER TABLE users ADD COLUMN kyc_document_front LONGTEXT AFTER kyc_id`);
+        }
+        const [kycBackCols] = await connection.query(`SHOW COLUMNS FROM users LIKE 'kyc_document_back'`);
+        if (kycBackCols.length === 0) {
+            await connection.query(`ALTER TABLE users ADD COLUMN kyc_document_back LONGTEXT AFTER kyc_document_front`);
+        }
+
         const [passCols] = await connection.query(`SHOW COLUMNS FROM users LIKE 'password'`);
         if (passCols.length === 0) {
             await connection.query(`ALTER TABLE users ADD COLUMN password VARCHAR(255) AFTER email`);
@@ -401,16 +411,16 @@ app.get('/api/check-health', (req, res) => {
 // --- AUTHENTICATION API (PUBLIC) ---
 
 app.post('/api/auth/register', validate(schemas.register), async (req, res, next) => {
-    const { id, name, email, password, phoneNumber, avatar, kycDocumentImage, occupation, location, kycId } = req.body;
+    const { id, name, email, password, phoneNumber, avatar, kycDocumentFront, kycDocumentBack, occupation, location, kycId } = req.body;
     try {
         const [existing] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
         if (existing.length > 0) return res.status(409).json({ error: "Email already registered." });
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        const sql = `INSERT INTO users (id, name, email, password, role, phone_number, avatar, kyc_document_image, occupation, location, kyc_id, status, verification_status) 
-                     VALUES (?, ?, ?, ?, 'MEMBER', ?, ?, ?, ?, ?, ?, 'PENDING', 'PENDING')`;
+        const sql = `INSERT INTO users (id, name, email, password, role, phone_number, avatar, kyc_document_front, kyc_document_back, occupation, location, kyc_id, status, verification_status) 
+                     VALUES (?, ?, ?, ?, 'MEMBER', ?, ?, ?, ?, ?, ?, ?, 'PENDING', 'PENDING')`;
         
-        await pool.query(sql, [id, name, email, hashedPassword, phoneNumber, avatar, kycDocumentImage, occupation, location, kycId]);
+        await pool.query(sql, [id, name, email, hashedPassword, phoneNumber, avatar, kycDocumentFront, kycDocumentBack, occupation, location, kycId]);
         
         const token = jwt.sign({ id, email, role: 'MEMBER' }, JWT_SECRET, { expiresIn: '24h' });
         res.status(201).json({ success: true, token });

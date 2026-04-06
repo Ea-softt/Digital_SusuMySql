@@ -36,6 +36,8 @@ async function setupDatabase() {
                 occupation VARCHAR(100),
                 location VARCHAR(150),
                 kyc_id VARCHAR(50),
+                kyc_document_front LONGTEXT,
+                kyc_document_back LONGTEXT,
                 status ENUM('ACTIVE', 'PENDING', 'SUSPENDED', 'INVITED', 'NEW') DEFAULT 'NEW',
                 verification_status ENUM('VERIFIED', 'PENDING', 'REJECTED', 'UNVERIFIED') DEFAULT 'UNVERIFIED',
                 join_date DATETIME DEFAULT CURRENT_TIMESTAMP,

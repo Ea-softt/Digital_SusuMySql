@@ -36,6 +36,7 @@ const App: React.FC = () => {
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [name, setName] = useState('');
   const [occupation, setOccupation] = useState('');
   const [location, setLocation] = useState('');
@@ -43,6 +44,9 @@ const App: React.FC = () => {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [registerRole, setRegisterRole] = useState<UserRole>(UserRole.MEMBER);
   const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [idFrontImage, setIdFrontImage] = useState<string | null>(null);
+  const [idBackImage, setIdBackImage] = useState<string | null>(null);
+  const [cameraMode, setCameraMode] = useState<'profile' | 'idFront' | 'idBack'>('profile');
   
   const [isLoading, setIsLoading] = useState(false);
   const [isRestoringSession, setIsRestoringSession] = useState(true);
@@ -120,10 +124,17 @@ const App: React.FC = () => {
         canvasRef.current.height = videoRef.current.videoHeight;
         context.drawImage(videoRef.current, 0, 0);
         const dataUrl = canvasRef.current.toDataURL('image/png');
-        setProfileImage(dataUrl);
+        if (cameraMode === 'profile') setProfileImage(dataUrl);
+        else if (cameraMode === 'idFront') setIdFrontImage(dataUrl);
+        else if (cameraMode === 'idBack') setIdBackImage(dataUrl);
         setIsCameraOpen(false);
       }
     }
+  };
+
+  const openCamera = (mode: 'profile' | 'idFront' | 'idBack') => {
+      setCameraMode(mode);
+      setIsCameraOpen(true);
   };
 
   const handleGetLocation = () => {
@@ -215,8 +226,34 @@ const App: React.FC = () => {
     }
 
     if (authMode === 'register') {
+      // Strong Password Regex: 8+ chars, Upper, Lower, Number, Special
+      const strongRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+      if (!strongRegex.test(password)) {
+          setNotification({ type: 'error', message: 'Password must be at least 8 characters and include uppercase, lowercase, numbers, and symbols.' });
+          setIsLoading(false);
+          return;
+      }
+
+      if (password !== passwordConfirmation) {
+          setNotification({ type: 'error', message: 'Passwords do not match.' });
+          setIsLoading(false);
+          return;
+      }
+
+      if (!/^GHA-\d{9}-\d$/.test(kycId)) {
+          setNotification({ type: 'error', message: 'Invalid Ghana Card ID. Format: GHA-123456789-1' });
+          setIsLoading(false);
+          return;
+      }
+
+      if (!idFrontImage || !idBackImage) {
+          setNotification({ type: 'error', message: 'Both front and back pictures of your ID are required.' });
+          setIsLoading(false);
+          return;
+      }
+
       // NEW USERS: All start as PENDING / PENDING VERIFICATION
-      const newUser: User = {
+      const newUser: any = {
           id: `u${Date.now()}`,
           name: name,
           email: email,
@@ -226,6 +263,8 @@ const App: React.FC = () => {
           occupation: occupation,
           location: location,
           kycId: kycId,
+          kycDocumentFront: idFrontImage,
+          kycDocumentBack: idBackImage,
           status: 'PENDING',
           verificationStatus: 'PENDING',
           joinDate: new Date().toISOString().split('T')[0],
@@ -234,7 +273,7 @@ const App: React.FC = () => {
       };
 
       try {
-          await db.registerUser(newUser, password);
+          await db.registerUser(newUser as User, password);
           handleLogin(newUser);
           setNotification({ type: 'info', message: 'Registration successful! Your account is pending verification by the system administrator.' });
       } catch (err) {
@@ -377,20 +416,29 @@ const App: React.FC = () => {
                                 <button type="button" onClick={() => setRegisterRole(UserRole.MEMBER)} className={`p-4 rounded-xl border flex flex-col items-center gap-2 transition-all ${registerRole === UserRole.MEMBER ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-500'}`}><Users className="w-6 h-6" /><span className="text-sm font-bold">Member</span></button>
                                 <button type="button" onClick={() => setRegisterRole(UserRole.ADMIN)} className={`p-4 rounded-xl border flex flex-col items-center gap-2 transition-all ${registerRole === UserRole.ADMIN ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-500'}`}><Crown className="w-6 h-6" /><span className="text-sm font-bold">Leader</span></button>
                             </div>
-                            <div className="flex flex-col items-center mb-6">
-                                <div className="relative cursor-pointer" onClick={() => setIsCameraOpen(true)}>
-                                    <div className={`w-24 h-24 rounded-full flex items-center justify-center overflow-hidden border-4 ${profileImage ? 'border-primary-500' : 'border-gray-300 bg-gray-50'}`}>{profileImage ? <img src={profileImage} alt="" className="w-full h-full object-cover" /> : <Camera className="w-8 h-8 text-gray-400" />}</div>
+                            <div className="grid grid-cols-3 gap-4 mb-6">
+                                <div className="flex flex-col items-center gap-1">
+                                    <div className={`w-16 h-16 rounded-full flex items-center justify-center overflow-hidden border-2 cursor-pointer ${profileImage ? 'border-primary-500' : 'border-gray-300 bg-gray-50'}`} onClick={() => openCamera('profile')}>{profileImage ? <img src={profileImage} alt="" className="w-full h-full object-cover" /> : <UserIcon className="w-6 h-6 text-gray-400" />}</div>
+                                    <span className="text-[10px] font-bold text-gray-500">Avatar</span>
+                                </div>
+                                <div className="flex flex-col items-center gap-1">
+                                    <div className={`w-16 h-16 rounded-xl flex items-center justify-center overflow-hidden border-2 cursor-pointer ${idFrontImage ? 'border-primary-500' : 'border-gray-300 bg-gray-50'}`} onClick={() => openCamera('idFront')}>{idFrontImage ? <img src={idFrontImage} alt="" className="w-full h-full object-cover" /> : <Camera className="w-6 h-6 text-gray-400" />}</div>
+                                    <span className="text-[10px] font-bold text-gray-500">ID Front</span>
+                                </div>
+                                <div className="flex flex-col items-center gap-1">
+                                    <div className={`w-16 h-16 rounded-xl flex items-center justify-center overflow-hidden border-2 cursor-pointer ${idBackImage ? 'border-primary-500' : 'border-gray-300 bg-gray-50'}`} onClick={() => openCamera('idBack')}>{idBackImage ? <img src={idBackImage} alt="" className="w-full h-full object-cover" /> : <Camera className="w-6 h-6 text-gray-400" />}</div>
+                                    <span className="text-[10px] font-bold text-gray-500">ID Back</span>
                                 </div>
                             </div>
                             <div className="space-y-4">
                                 <input type="text" required value={name} onChange={e => setName(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Full Name" />
                                 <input type="text" required value={occupation} onChange={e => setOccupation(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Occupation" />
-                                <input type="tel" required value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Phone Number" />
+                                <input type="tel" required maxLength={10} value={phoneNumber} onChange={e => setPhoneNumber(e.target.value.replace(/\D/g, ''))} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Phone Number (10 digits)" />
                                 <div className="flex gap-2">
                                     <input type="text" readOnly required value={location} className="flex-1 p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Location" />
                                     <button type="button" onClick={handleGetLocation} className="p-3 bg-primary-100 rounded-xl"><MapPin className="w-5 h-5 text-primary-600" /></button>
                                 </div>
-                                <input type="text" required value={kycId} onChange={e => setKycId(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="National ID" />
+                                <input type="text" required value={kycId} onChange={e => setKycId(e.target.value.toUpperCase())} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Ghana Card (GHA-000000000-0)" />
                             </div>
                          </>
                     )}
@@ -401,6 +449,9 @@ const App: React.FC = () => {
                             <input type={showPassword ? "text" : "password"} required value={password} onChange={e => setPassword(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Password" />
                             <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-gray-400">{showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}</button>
                         </div>
+                        {authMode === 'register' && (
+                            <input type="password" required value={passwordConfirmation} onChange={e => setPasswordConfirmation(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Confirm Password" />
+                        )}
                     </div>
 
                     <button type="submit" disabled={isLoading} className="w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2">

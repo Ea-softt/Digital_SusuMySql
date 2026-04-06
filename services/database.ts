@@ -224,6 +224,8 @@ class DatabaseService {
                     occupation: user.occupation,
                     location: user.location,
                     kycId: user.kycId,
+                    kycDocumentFront: (user as any).kycDocumentFront,
+                    kycDocumentBack: (user as any).kycDocumentBack,
                     password
                 })
             });
