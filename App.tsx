@@ -227,7 +227,7 @@ const App: React.FC = () => {
   const handleGetLocation = () => {
     setIsLocating(true);
     if ('geolocation' in navigator) {
-        navigator.geolocation.getCurrentPosition((position) => {
+        navigator.geolocation.getCurrentPosition((position: GeolocationPosition) => {
             const { latitude, longitude } = position.coords;
             setLocation(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
             setIsLocating(false);
@@ -340,7 +340,7 @@ const App: React.FC = () => {
       }
 
       // NEW USERS: All start as PENDING / PENDING VERIFICATION
-      const newUser: any = {
+      const newUser: User = {
           id: `u${Date.now()}`,
           name: name,
           email: email,
@@ -362,7 +362,7 @@ const App: React.FC = () => {
       };
 
       try {
-          await db.registerUser(newUser as User, password);
+          await db.registerUser(newUser, password);
           handleLogin(newUser);
           setNotification({ type: 'info', message: 'Registration successful! Your account is pending verification by the system administrator.' });
       } catch (err) {
@@ -388,7 +388,7 @@ const App: React.FC = () => {
         // Handle special views for superuser
         if (currentView === 'create-profile') {
             return (
-                <Layout currentUser={currentUser} onLogout={handleLogout} currentView={currentView} onNavigate={setCurrentView} isDarkMode={isDarkMode} toggleDarkMode={() => setIsDarkMode(!isDarkMode)}>
+                <Layout currentUser={contextUser || currentUser} onLogout={handleLogout} currentView={currentView} onNavigate={setCurrentView} isDarkMode={isDarkMode} toggleDarkMode={() => setIsDarkMode(!isDarkMode)}>
                     <CreateUserProfile onSuccess={refreshData} onCancel={() => setCurrentView('dashboard')} />
                 </Layout>
             );
@@ -396,7 +396,7 @@ const App: React.FC = () => {
         
         if (currentView === 'ai-help') {
             return (
-                <Layout currentUser={currentUser} onLogout={handleLogout} currentView={currentView} onNavigate={setCurrentView} isDarkMode={isDarkMode} toggleDarkMode={() => setIsDarkMode(!isDarkMode)}>
+                <Layout currentUser={contextUser || currentUser} onLogout={handleLogout} currentView={currentView} onNavigate={setCurrentView} isDarkMode={isDarkMode} toggleDarkMode={() => setIsDarkMode(!isDarkMode)}>
                     <AIHelpCenter />
                 </Layout>
             );
@@ -412,7 +412,7 @@ const App: React.FC = () => {
         const initialTab = tabMap[currentView] || 'overview';
 
         return (
-            <Layout currentUser={currentUser} onLogout={handleLogout} currentView={currentView} onNavigate={setCurrentView} isDarkMode={isDarkMode} toggleDarkMode={() => setIsDarkMode(!isDarkMode)}>
+            <Layout currentUser={contextUser || currentUser} onLogout={handleLogout} currentView={currentView} onNavigate={setCurrentView} isDarkMode={isDarkMode} toggleDarkMode={() => setIsDarkMode(!isDarkMode)}>
                 <SuperuserDashboard members={dbMembers} transactions={dbTransactions} groups={dbGroups} onRefresh={refreshData} currentUser={currentUser} initialTab={initialTab} />
             </Layout>
         );
@@ -426,18 +426,18 @@ const App: React.FC = () => {
         {currentView === 'dashboard' && contextUser && (
             <>
                 {contextUser.role === UserRole.MEMBER && <MemberDashboard group={activeGroup || dummyGroupForNewUser} transactions={dbTransactions} userId={currentUser.id} currentUser={contextUser} onRefresh={refreshData} members={dbMembers} />}
-                {contextUser.role === UserRole.ADMIN && <AdminDashboard group={activeGroup} transactions={dbTransactions} members={dbMembers} currentUser={contextUser} onRefresh={refreshData} initialTab="overview" />}
+                {contextUser.role === UserRole.ADMIN && <AdminDashboard group={activeGroup || dummyGroupForNewUser} transactions={dbTransactions} members={dbMembers} currentUser={contextUser} onRefresh={refreshData} initialTab="overview" />}
             </>
         )}
         {currentView === 'join-group' && <JoinGroup userId={currentUser.id} onSuccess={refreshData} onCancel={userGroups.length > 0 ? () => handleGroupSwitch(userGroups[0]) : undefined} canCreateGroup={currentUser.role === UserRole.ADMIN} />}
         {currentView === 'help' && <HelpCenter />}
         {currentView === 'ai-help' && <AIHelpCenter />}
         {currentView === 'chat' && activeGroup && <GroupChat currentUser={contextUser || currentUser} activeGroup={activeGroup} />}
-        {currentView === 'profile' && <ProfileSettings user={currentUser} onUpdateProfile={(data) => db.updateUser(currentUser.id, data).then(refreshData)} />}
+        {currentView === 'profile' && <ProfileSettings user={currentUser} onUpdateProfile={(data: Partial<User>) => db.updateUser(currentUser.id, data).then(refreshData)} />}
         {currentView === 'create-profile' && <CreateUserProfile onSuccess={refreshData} onCancel={() => setCurrentView('dashboard')} />}
-        {currentView === 'transactions' && activeGroup && <TransactionHistory transactions={dbTransactions.filter(t => t.groupId === activeGroup.id)} currency={activeGroup.currency} />}
-        {currentView === 'members' && activeGroup && contextUser?.role === UserRole.ADMIN && <AdminDashboard group={activeGroup} transactions={dbTransactions} members={dbMembers} currentUser={contextUser} onRefresh={refreshData} initialTab="members" />}
-        {currentView === 'settings' && activeGroup && contextUser?.role === UserRole.ADMIN && <AdminDashboard group={activeGroup} transactions={dbTransactions} members={dbMembers} currentUser={contextUser} onRefresh={refreshData} initialTab="settings" />}
+        {currentView === 'transactions' && activeGroup && <TransactionHistory transactions={dbTransactions.filter((t: Transaction) => t.groupId === activeGroup.id)} currency={activeGroup.currency} />}
+        {currentView === 'members' && activeGroup && contextUser?.role === UserRole.ADMIN && <AdminDashboard group={activeGroup || dummyGroupForNewUser} transactions={dbTransactions} members={dbMembers} currentUser={contextUser} onRefresh={refreshData} initialTab="members" />}
+        {currentView === 'settings' && activeGroup && contextUser?.role === UserRole.ADMIN && <AdminDashboard group={activeGroup || dummyGroupForNewUser} transactions={dbTransactions} members={dbMembers} currentUser={contextUser} onRefresh={refreshData} initialTab="settings" />}
         {currentView === 'admin-mgmt' && contextUser?.role === UserRole.SUPERUSER && <SuperuserDashboard members={dbMembers} transactions={dbTransactions} groups={dbGroups} onRefresh={refreshData} currentUser={currentUser} />}
         <GeminiAdvisor />
       </Layout>
@@ -512,13 +512,30 @@ const App: React.FC = () => {
                         <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center border border-blue-500/30"><TrendingUp className="w-6 h-6 text-blue-400" /></div>
                         <div><h4 className="text-white font-bold">Community Trust</h4><p className="text-primary-200 text-sm">Automated tracking ensures every member stays accountable and reliable.</p></div>
                     </div>
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center border border-purple-500/30"><Sparkles className="w-6 h-6 text-purple-400" /></div>
+                        <div><h4 className="text-white font-bold">AI Optimization</h4><p className="text-primary-200 text-sm">Smart rotation schedules optimized by Gemini AI for maximum financial impact.</p></div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center border border-amber-500/30"><Award className="w-6 h-6 text-amber-400" /></div>
+                        <div><h4 className="text-white font-bold">Verified Growth</h4><p className="text-primary-200 text-sm">Build your platform reliability score and unlock exclusive savings groups.</p></div>
+                    </div>
+                </div>
+
+                <div className="mt-16 flex items-center gap-4 animate-fade-in" style={{ animationDelay: '0.8s' }}>
+                    <div className="flex -space-x-3">
+                        {[1,2,3,4].map(i => (
+                            <img key={i} src={`https://i.pravatar.cc/100?u=${i + 10}`} className="w-10 h-10 rounded-full border-2 border-primary-900 shadow-lg object-cover" alt="User" />
+                        ))}
+                    </div>
+                    <p className="text-primary-200 text-sm font-medium">Join <span className="text-white font-bold">2,400+</span> active savers across Ghana</p>
                 </div>
             </div>
         </div>
       </div>
 
-      <div className="relative z-20 w-full max-w-[440px] animate-fade-in-up">
-            <div className="bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-white/20 dark:border-gray-700">
+      <div className="relative z-20 w-full max-w-[440px] animate-fade-in-up group">
+            <div className="bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-white/20 dark:border-gray-700 transition-transform duration-500 group-hover:-translate-y-1">
                 <div className="mb-8 text-center">
                     <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">{authMode === 'login' ? 'Sign In' : 'Create Account'}</h2>
                     <p className="text-gray-500 dark:text-gray-400 text-sm">Access your secure susu portal.</p>
@@ -565,26 +582,26 @@ const App: React.FC = () => {
                                 </div>
                             </div>
                             <div className="space-y-4">
-                                <input type="text" required value={name} onChange={e => setName(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Full Name" />
-                                <input type="text" required value={occupation} onChange={e => setOccupation(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Occupation" />
-                                <input type="tel" required maxLength={10} value={phoneNumber} onChange={e => setPhoneNumber(e.target.value.replace(/\D/g, ''))} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Phone Number (10 digits)" />
+                                <input type="text" required value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Full Name" />
+                                <input type="text" required value={occupation} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOccupation(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Occupation" />
+                                <input type="tel" required maxLength={10} value={phoneNumber} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPhoneNumber(e.target.value.replace(/\D/g, ''))} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Phone Number (10 digits)" />
                                 <div className="flex gap-2">
                                     <input type="text" readOnly required value={location} className="flex-1 p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Location" />
                                     <button type="button" onClick={handleGetLocation} className="p-3 bg-primary-100 rounded-xl"><MapPin className="w-5 h-5 text-primary-600" /></button>
                                 </div>
-                                <input type="text" required value={kycId} onChange={e => setKycId(e.target.value.toUpperCase())} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Ghana Card (GHA-000000000-0)" />
+                                <input type="text" required value={kycId} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setKycId(e.target.value.toUpperCase())} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Ghana Card (GHA-000000000-0)" />
                             </div>
                          </>
                     )}
 
                     <div className="space-y-4">
-                        <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Email Address" />
+                        <input type="email" required value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Email Address" />
                         <div className="relative">
-                            <input type={showPassword ? "text" : "password"} required value={password} onChange={e => setPassword(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Password" />
+                            <input type={showPassword ? "text" : "password"} required value={password} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Password" />
                             <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-gray-400">{showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}</button>
                         </div>
                         {authMode === 'register' && (
-                            <input type="password" required value={passwordConfirmation} onChange={e => setPasswordConfirmation(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Confirm Password" />
+                            <input type="password" required value={passwordConfirmation} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPasswordConfirmation(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Confirm Password" />
                         )}
                     </div>
 

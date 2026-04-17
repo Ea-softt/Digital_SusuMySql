@@ -5,10 +5,11 @@ import { db } from '../services/database';
 
 interface CreateUserProfileProps {
   userId?: string;
+  onSuccess?: () => void;
   onCancel?: () => void;
 }
 
-export const CreateUserProfile: React.FC<CreateUserProfileProps> = ({ userId, onCancel }) => {
+export const CreateUserProfile: React.FC<CreateUserProfileProps> = ({ userId, onSuccess, onCancel }) => {
   const [user, setUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -73,7 +74,7 @@ export const CreateUserProfile: React.FC<CreateUserProfileProps> = ({ userId, on
 
     try {
       // Update user in database
-      db.updateUser(user.id, editFormData);
+      await db.updateUser(user.id, editFormData);
       
       // Update local state
       setUser({...user, ...editFormData});
@@ -82,6 +83,7 @@ export const CreateUserProfile: React.FC<CreateUserProfileProps> = ({ userId, on
       
       // Reload users list to reflect changes
       loadUsersList();
+      onSuccess?.();
     } catch (error) {
       setSaveMessage({ type: 'error', text: 'Failed to save changes. Please try again.' });
       console.error('Error saving user:', error);
@@ -333,12 +335,12 @@ export const CreateUserProfile: React.FC<CreateUserProfileProps> = ({ userId, on
                 <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Status</label>
                 <select
                   value={editFormData.status || 'ACTIVE'}
-                  onChange={(e) => setEditFormData({...editFormData, status: e.target.value})}
+                  onChange={(e) => setEditFormData({...editFormData, status: e.target.value as any})}
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
                 >
                   <option value="ACTIVE">Active</option>
                   <option value="SUSPENDED">Suspended</option>
-                  <option value="INACTIVE">Inactive</option>
+                  <option value="PENDING">Pending Approval</option>
                 </select>
               </div>
 

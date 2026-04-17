@@ -14,7 +14,8 @@ export const MOCK_GROUP: Group = {
   membersCount: 10,
   inviteCode: 'SUSU-2024-FAM',
   payoutSchedule: ['u1', 'u3', 'u4', 'u5', 'u2'],
-  reminderDaysBefore: 3
+  reminderDaysBefore: 3,
+  status: 'ACTIVE'
 };
 
 const DEFAULT_MEMBERSHIP = {

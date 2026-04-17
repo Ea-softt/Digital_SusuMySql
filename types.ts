@@ -72,6 +72,9 @@ export interface User {
   // KYC (Know Your Customer) fields
   verificationStatus?: 'VERIFIED' | 'PENDING' | 'REJECTED' | 'UNVERIFIED';
   idDocumentUrl?: string;
+  kycDocumentFront?: string;
+  kycDocumentBack?: string;
+  isFaceVerified?: boolean;
   rejectionReason?: string;
   
   // Auth & Security
