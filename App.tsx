@@ -20,6 +20,7 @@ type AuthMode = 'login' | 'register' | 'forgot' | '2fa';
 
 const SESSION_KEY = 'susu_auth_session_email';
 const LAST_GROUP_KEY = 'susu_last_active_group_id';
+const REG_DRAFT_KEY = 'susu_registration_draft';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -38,11 +39,13 @@ const App: React.FC = () => {
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [name, setName] = useState('');
+  const [bio, setBio] = useState('');
   const [occupation, setOccupation] = useState('');
   const [location, setLocation] = useState('');
   const [kycId, setKycId] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [registerRole, setRegisterRole] = useState<UserRole>(UserRole.MEMBER);
+  const [regStep, setRegStep] = useState(1);
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [idFrontImage, setIdFrontImage] = useState<string | null>(null);
   const [idBackImage, setIdBackImage] = useState<string | null>(null);
@@ -103,6 +106,15 @@ const App: React.FC = () => {
     }, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (authMode === 'register') {
+      const draft = { name, email, occupation, phoneNumber, location, kycId, bio, role: registerRole };
+      localStorage.setItem(REG_DRAFT_KEY, JSON.stringify(draft));
+    } else {
+      setRegStep(1);
+    }
+  }, [name, email, occupation, phoneNumber, location, kycId, bio, registerRole, authMode]);
 
   // 📸 Camera Stream Management
   useEffect(() => {
@@ -313,33 +325,45 @@ const App: React.FC = () => {
     }
 
     if (authMode === 'register') {
-      // Strong Password Regex: 8+ chars, Upper, Lower, Number, Special
-      const strongRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-      if (!strongRegex.test(password)) {
-          setNotification({ type: 'error', message: 'Password must be at least 8 characters and include uppercase, lowercase, numbers, and symbols.' });
+      if (regStep === 1) {
+        if (!name || !email || !phoneNumber || !kycId || !password || !passwordConfirmation) {
+          setNotification({ type: 'error', message: 'Please fill in all account fields.' });
           setIsLoading(false);
           return;
-      }
+        }
 
-      if (password !== passwordConfirmation) {
-          setNotification({ type: 'error', message: 'Passwords do not match.' });
-          setIsLoading(false);
-          return;
-      }
-
-      if (!/^GHA-\d{9}-\d$/.test(kycId)) {
+        if (!/^GHA-\d{9}-\d$/.test(kycId)) {
           setNotification({ type: 'error', message: 'Invalid Ghana Card ID. Format: GHA-123456789-1' });
           setIsLoading(false);
           return;
-      }
+        }
 
-      if (!idFrontImage || !idBackImage) {
-          setNotification({ type: 'error', message: 'Both front and back pictures of your ID are required.' });
+        const strongRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+        if (!strongRegex.test(password)) {
+          setNotification({ type: 'error', message: 'Password must be at least 8 characters and include uppercase, lowercase, numbers, and symbols.' });
           setIsLoading(false);
           return;
+        }
+
+        if (password !== passwordConfirmation) {
+          setNotification({ type: 'error', message: 'Passwords do not match.' });
+          setIsLoading(false);
+          return;
+        }
+
+        setRegStep(2);
+        setIsLoading(false);
+        return;
       }
 
-      // NEW USERS: All start as PENDING / PENDING VERIFICATION
+      // Validation for Step 2 (Final submission)
+      if (!idFrontImage || !idBackImage) {
+        setNotification({ type: 'error', message: 'Both front and back pictures of your ID are required.' });
+        setIsLoading(false);
+        return;
+      }
+      
+      // Final User Construction and API call happens here...
       const newUser: User = {
           id: `u${Date.now()}`,
           name: name,
@@ -347,14 +371,14 @@ const App: React.FC = () => {
           phoneNumber: phoneNumber,
           role: registerRole,
           avatar: profileImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
+          bio: bio,
           occupation: occupation,
           location: location,
           kycId: kycId,
-          kycDocumentFront: idFrontImage,
-          kycDocumentBack: idBackImage,
+          kycDocumentFront: idFrontImage || undefined,
+          kycDocumentBack: idBackImage || undefined,
           status: 'PENDING',
           verificationStatus: 'PENDING',
-          // Simulated KYC Verification flag
           isFaceVerified: true, 
           joinDate: new Date().toISOString().split('T')[0],
           reliabilityScore: 100,
@@ -363,6 +387,7 @@ const App: React.FC = () => {
 
       try {
           await db.registerUser(newUser, password);
+          localStorage.removeItem(REG_DRAFT_KEY);
           handleLogin(newUser);
           setNotification({ type: 'info', message: 'Registration successful! Your account is pending verification by the system administrator.' });
       } catch (err) {
@@ -541,6 +566,24 @@ const App: React.FC = () => {
                     <p className="text-gray-500 dark:text-gray-400 text-sm">Access your secure susu portal.</p>
                 </div>
 
+                {authMode === 'register' && (
+                    <div className="flex items-center justify-between mb-8 px-2">
+                        <div className="flex flex-col items-center gap-1">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-all ${regStep === 1 ? 'bg-primary-600 text-white ring-4 ring-primary-100' : 'bg-green-500 text-white'}`}>
+                                {regStep > 1 ? <CheckCircle className="w-4 h-4" /> : '1'}
+                            </div>
+                            <span className={`text-[10px] font-bold uppercase tracking-wider ${regStep === 1 ? 'text-primary-600' : 'text-green-600'}`}>Account</span>
+                        </div>
+                        <div className={`flex-1 h-0.5 mx-4 transition-all duration-500 ${regStep > 1 ? 'bg-green-500' : 'bg-gray-200'}`}></div>
+                        <div className="flex flex-col items-center gap-1">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-all ${regStep === 2 ? 'bg-primary-600 text-white ring-4 ring-primary-100' : 'bg-gray-200 text-gray-400'}`}>
+                                2
+                            </div>
+                            <span className={`text-[10px] font-bold uppercase tracking-wider ${regStep === 2 ? 'text-primary-600' : 'text-gray-400'}`}>Profile</span>
+                        </div>
+                    </div>
+                )}
+
                 {notification && (
                     <div className={`mb-6 p-4 rounded-xl flex items-start gap-3 text-sm border ${notification.type === 'success' ? 'bg-green-50 text-green-700 border-green-200' : notification.type === 'info' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
                         {notification.type === 'success' ? <CheckCircle className="w-5 h-5" /> : notification.type === 'info' ? <AlertCircle className="w-5 h-5 text-blue-500" /> : <AlertCircle className="w-5 h-5" />}
@@ -549,11 +592,31 @@ const App: React.FC = () => {
                 )}
 
                 <form onSubmit={handleAuthSubmit} className="space-y-5">
-                    {authMode === 'register' && (
+                    {authMode === 'register' && regStep === 1 && (
                          <>
                             <div className="grid grid-cols-2 gap-4 mb-6">
                                 <button type="button" onClick={() => setRegisterRole(UserRole.MEMBER)} className={`p-4 rounded-xl border flex flex-col items-center gap-2 transition-all ${registerRole === UserRole.MEMBER ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-500'}`}><Users className="w-6 h-6" /><span className="text-sm font-bold">Member</span></button>
                                 <button type="button" onClick={() => setRegisterRole(UserRole.ADMIN)} className={`p-4 rounded-xl border flex flex-col items-center gap-2 transition-all ${registerRole === UserRole.ADMIN ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-500'}`}><Crown className="w-6 h-6" /><span className="text-sm font-bold">Leader</span></button>
+                            </div>
+                            <div className="space-y-4">
+                                <input type="text" required value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Full Name" />
+                                <input type="email" required value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Email Address" />
+                                <input type="tel" required maxLength={10} value={phoneNumber} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPhoneNumber(e.target.value.replace(/\D/g, ''))} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Phone Number (e.g. 0244123456)" />
+                                <input type="text" required value={kycId} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setKycId(e.target.value.toUpperCase())} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Ghana Card ID (GHA-123456789-1)" />
+                                <div className="relative">
+                                    <input type={showPassword ? "text" : "password"} required value={password} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Password" />
+                                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-gray-400">{showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}</button>
+                                </div>
+                                <input type="password" required value={passwordConfirmation} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPasswordConfirmation(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Confirm Password" />
+                            </div>
+                         </>
+                    )}
+
+                    {authMode === 'register' && regStep === 2 && (
+                         <>
+                            <div className="flex items-center gap-2 mb-4">
+                                <button type="button" onClick={() => setRegStep(1)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><ArrowLeft className="w-5 h-5 text-gray-500" /></button>
+                                <span className="text-sm font-bold text-gray-700">Back to Basic Info</span>
                             </div>
                             <div className="space-y-4 mb-6">
                                 <div className="flex justify-center">
@@ -566,47 +629,46 @@ const App: React.FC = () => {
                                     </div>
                                 </div>
                                 
+                                <textarea value={bio} onChange={(e) => setBio(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white min-h-[80px]" placeholder="Tell us about yourself (Bio)" />
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <input type="text" required value={occupation} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOccupation(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white text-sm" placeholder="Occupation" />
+                                    <div className="flex gap-1 flex-1">
+                                        <input type="text" readOnly required value={location} className="flex-1 p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white text-sm" placeholder="Location" />
+                                        <button type="button" onClick={handleGetLocation} className="p-2 bg-primary-100 rounded-xl"><MapPin className="w-4 h-4 text-primary-600" /></button>
+                                    </div>
+                                </div>
+
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="flex flex-col gap-2">
-                                        <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Ghana Card Front</label>
+                                        <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Card Front</label>
                                         <div className={`aspect-[3/2] w-full rounded-2xl flex items-center justify-center overflow-hidden border-2 border-dashed cursor-pointer transition-all ${idFrontImage ? 'border-green-500 bg-green-50' : 'border-gray-200 bg-gray-50 hover:border-primary-400'}`} onClick={() => openCamera('idFront')}>
                                             {idFrontImage ? <img src={idFrontImage} alt="" className="w-full h-full object-cover" /> : <FileText className="w-8 h-8 text-gray-300" />}
                                         </div>
                                     </div>
                                     <div className="flex flex-col gap-2">
-                                        <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Ghana Card Back</label>
+                                        <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Card Back</label>
                                         <div className={`aspect-[3/2] w-full rounded-2xl flex items-center justify-center overflow-hidden border-2 border-dashed cursor-pointer transition-all ${idBackImage ? 'border-green-500 bg-green-50' : 'border-gray-200 bg-gray-50 hover:border-primary-400'}`} onClick={() => openCamera('idBack')}>
                                             {idBackImage ? <img src={idBackImage} alt="" className="w-full h-full object-cover" /> : <FileText className="w-8 h-8 text-gray-300" />}
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                            <div className="space-y-4">
-                                <input type="text" required value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Full Name" />
-                                <input type="text" required value={occupation} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOccupation(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Occupation" />
-                                <input type="tel" required maxLength={10} value={phoneNumber} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPhoneNumber(e.target.value.replace(/\D/g, ''))} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Phone Number (10 digits)" />
-                                <div className="flex gap-2">
-                                    <input type="text" readOnly required value={location} className="flex-1 p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Location" />
-                                    <button type="button" onClick={handleGetLocation} className="p-3 bg-primary-100 rounded-xl"><MapPin className="w-5 h-5 text-primary-600" /></button>
-                                </div>
-                                <input type="text" required value={kycId} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setKycId(e.target.value.toUpperCase())} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Ghana Card (GHA-000000000-0)" />
-                            </div>
                          </>
                     )}
 
-                    <div className="space-y-4">
-                        <input type="email" required value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Email Address" />
-                        <div className="relative">
-                            <input type={showPassword ? "text" : "password"} required value={password} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Password" />
-                            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-gray-400">{showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}</button>
+                    {authMode === 'login' && (
+                        <div className="space-y-4">
+                            <input type="email" required value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Email Address" />
+                            <div className="relative">
+                                <input type={showPassword ? "text" : "password"} required value={password} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Password" />
+                                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-gray-400">{showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}</button>
+                            </div>
                         </div>
-                        {authMode === 'register' && (
-                            <input type="password" required value={passwordConfirmation} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPasswordConfirmation(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Confirm Password" />
-                        )}
-                    </div>
+                    )}
 
                     <button type="submit" disabled={isLoading} className="w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2">
-                        {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : (authMode === 'login' ? 'Sign In' : 'Register')}
+                        {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : (authMode === 'login' ? 'Sign In' : (regStep === 1 ? 'Continue' : 'Complete Registration'))}
                     </button>
                 </form>
 

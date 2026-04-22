@@ -56,6 +56,7 @@ export interface User {
   phoneNumber?: string; // The '?' means this field is optional
   role: UserRole; // This is their "Global" role or current context role
   avatar: string; // URL to image
+  bio?: string;
   occupation?: string;
   location?: string;
   kycId?: string; // National ID number
