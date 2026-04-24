@@ -21,6 +21,7 @@ type AuthMode = 'login' | 'register' | 'forgot' | '2fa';
 const SESSION_KEY = 'susu_auth_session_email';
 const LAST_GROUP_KEY = 'susu_last_active_group_id';
 const REG_DRAFT_KEY = 'susu_registration_draft';
+const API_URL = '/api';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -45,6 +46,8 @@ const App: React.FC = () => {
   const [kycId, setKycId] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [registerRole, setRegisterRole] = useState<UserRole>(UserRole.MEMBER);
+  const [forgotStep, setForgotStep] = useState(1);
+  const [resetCode, setResetCode] = useState('');
   const [regStep, setRegStep] = useState(1);
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [idFrontImage, setIdFrontImage] = useState<string | null>(null);
@@ -304,6 +307,52 @@ const App: React.FC = () => {
     setIsLoading(true);
     setNotification(null);
 
+    if (authMode === 'forgot') {
+        if (forgotStep === 1) {
+            try {
+                const response = await fetch(`${API_URL}/auth/forgot-password`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    setNotification({ type: 'success', message: data.demoCode ? `DEMO: Code is ${data.demoCode}` : data.message });
+                    setForgotStep(2);
+                } else {
+                    setNotification({ type: 'error', message: data.error || 'Request failed.' });
+                }
+            } catch (err) {
+                setNotification({ type: 'error', message: 'Server connection error.' });
+            }
+        } else {
+            if (password !== passwordConfirmation) {
+                setNotification({ type: 'error', message: 'Passwords do not match.' });
+                setIsLoading(false);
+                return;
+            }
+            try {
+                const response = await fetch(`${API_URL}/auth/reset-password`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, code: resetCode, newPassword: password })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    setNotification({ type: 'success', message: 'Password updated! You can now log in.' });
+                    setAuthMode('login');
+                    setForgotStep(1);
+                } else {
+                    setNotification({ type: 'error', message: data.error || 'Reset failed.' });
+                }
+            } catch (err) {
+                setNotification({ type: 'error', message: 'Server connection error.' });
+            }
+        }
+        setIsLoading(false);
+        return;
+    }
+
     if (authMode === 'login') {
       try {
           const existingUser = await db.login(email, password);
@@ -562,8 +611,8 @@ const App: React.FC = () => {
       <div className="relative z-20 w-full max-w-[440px] animate-fade-in-up group">
             <div className="bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-white/20 dark:border-gray-700 transition-transform duration-500 group-hover:-translate-y-1">
                 <div className="mb-8 text-center">
-                    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">{authMode === 'login' ? 'Sign In' : 'Create Account'}</h2>
-                    <p className="text-gray-500 dark:text-gray-400 text-sm">Access your secure susu portal.</p>
+                    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">{authMode === 'login' ? 'Sign In' : authMode === 'register' ? 'Create Account' : 'Reset Password'}</h2>
+                    <p className="text-gray-500 dark:text-gray-400 text-sm">{authMode === 'forgot' ? 'Follow steps to recover access.' : 'Access your secure susu portal.'}</p>
                 </div>
 
                 {authMode === 'register' && (
@@ -657,25 +706,51 @@ const App: React.FC = () => {
                          </>
                     )}
 
-                    {authMode === 'login' && (
+                    {authMode === 'forgot' && (
                         <div className="space-y-4">
-                            <input type="email" required value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Email Address" />
-                            <div className="relative">
-                                <input type={showPassword ? "text" : "password"} required value={password} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Password" />
-                                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-gray-400">{showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}</button>
-                            </div>
+                            {forgotStep === 1 ? (
+                                <input type="email" required value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Enter your email" />
+                            ) : (
+                                <>
+                                    <div className="p-3 bg-primary-50 rounded-xl text-primary-700 text-xs text-center border border-primary-100">Reset code sent to: <strong>{email}</strong></div>
+                                    <input type="text" required maxLength={6} value={resetCode} onChange={(e) => setResetCode(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white text-center tracking-[1em] font-bold" placeholder="000000" />
+                                    <div className="relative">
+                                        <input type={showPassword ? "text" : "password"} required value={password} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="New Password" />
+                                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-gray-400">{showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}</button>
+                                    </div>
+                                    <input type="password" required value={passwordConfirmation} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPasswordConfirmation(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Confirm New Password" />
+                                </>
+                            )}
                         </div>
                     )}
 
+                    {authMode === 'login' && (
+                        <>
+                            <div className="space-y-4">
+                                <input type="email" required value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Email Address" />
+                                <div className="relative">
+                                    <input type={showPassword ? "text" : "password"} required value={password} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-gray-700 dark:text-white" placeholder="Password" />
+                                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-gray-400">{showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}</button>
+                                </div>
+                            </div>
+                            <div className="flex justify-end">
+                                <button type="button" onClick={() => setAuthMode('forgot')} className="text-xs font-bold text-primary-600 hover:text-primary-700">Forgot Password?</button>
+                            </div>
+                        </>
+                    )}
+
                     <button type="submit" disabled={isLoading} className="w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2">
-                        {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : (authMode === 'login' ? 'Sign In' : (regStep === 1 ? 'Continue' : 'Complete Registration'))}
+                        {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : (authMode === 'login' ? 'Sign In' : authMode === 'register' ? (regStep === 1 ? 'Continue' : 'Complete Registration') : (forgotStep === 1 ? 'Send Reset Code' : 'Update Password'))}
                     </button>
                 </form>
 
                 <div className="mt-8 pt-6 border-t text-center">
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                        {authMode === 'login' ? "Don't have an account? " : "Already have an account? "}
-                        <button onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')} className="font-bold text-primary-600">
+                        {authMode === 'login' ? "Don't have an account? " : (authMode === 'register' ? "Already have an account? " : "Remember your password? ")}
+                        <button onClick={() => {
+                            setAuthMode(authMode === 'login' ? 'register' : 'login');
+                            setForgotStep(1);
+                        }} className="font-bold text-primary-600">
                             {authMode === 'login' ? 'Sign Up' : 'Log In'}
                         </button>
                     </p>

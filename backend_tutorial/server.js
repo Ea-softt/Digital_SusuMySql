@@ -24,7 +24,20 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // 🛡️ PRODUCTION HARDENING: Security Headers
-app.use(helmet());
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            "default-src": ["'self'"],
+            "connect-src": ["'self'", "http://localhost:3000", "http://localhost:3001", "https://api.paystack.co"],
+            "img-src": ["'self'", "data:", "blob:", "https://picsum.photos", "https://ui-avatars.com", "https://i.pravatar.cc", "https://*.paystack.co"],
+            "script-src": ["'self'", "'unsafe-inline'"],
+            "style-src": ["'self'", "'unsafe-inline'"],
+            "frame-src": ["'self'", "https://checkout.paystack.com", "https://checkout.paystack.co", "https://*.paystack.co"],
+            "font-src": ["'self'", "https:", "data:"],
+            "object-src": ["'none'"]
+        },
+    },
+}));
 
 // 🛡️ PRODUCTION HARDENING: Rate Limiting (Prevents Brute Force/DoS)
 const apiLimiter = rateLimit({
@@ -112,6 +125,14 @@ const schemas = {
     login: Joi.object({
         email: Joi.string().email().required(),
         password: Joi.string().required()
+    }),
+    resetRequest: Joi.object({
+        email: Joi.string().email().required()
+    }),
+    resetPassword: Joi.object({
+        email: Joi.string().email().required(),
+        code: Joi.string().length(6).required(),
+        newPassword: Joi.string().pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/).required()
     })
 };
 
@@ -221,6 +242,16 @@ async function initializeDatabase() {
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        `);
+
+        await connection.query(`
+            CREATE TABLE IF NOT EXISTS password_resets (
+                email VARCHAR(100) PRIMARY KEY,
+                token VARCHAR(10) NOT NULL,
+                expires_at DATETIME NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (email) REFERENCES users(email) ON DELETE CASCADE
             )
         `);
 
@@ -404,6 +435,10 @@ async function initializeDatabase() {
 
 // --- API ROUTES ---
 
+app.get('/', (req, res) => {
+    res.json({ message: "Digital Susu API is running", version: "1.0.0", health: "/api/check-health" });
+});
+
 app.get('/api/check-health', (req, res) => {
     res.json({ status: 'online', database: 'connected' });
 });
@@ -442,9 +477,44 @@ app.post('/api/auth/login', validate(schemas.login), async (req, res, next) => {
     } catch (error) { next(error); }
 });
 
-app.post('/api/auth/forgot-password', async (req, res, next) => {
-    // Stub for password recovery logic
-    res.json({ success: true, message: "If an account exists, instructions have been sent." });
+app.post('/api/auth/forgot-password', validate(schemas.resetRequest), async (req, res, next) => {
+    const { email } = req.body;
+    try {
+        const [user] = await pool.query('SELECT name FROM users WHERE email = ?', [email]);
+        if (user.length === 0) {
+            return res.json({ success: true, message: "If an account exists, instructions have been sent." });
+        }
+
+        // Generate a 6-digit code
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiresAt = new Date(Date.now() + 3600000); // 1 hour expiry
+
+        await pool.query(
+            'INSERT INTO password_resets (email, token, expires_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE token = ?, expires_at = ?',
+            [email, code, expiresAt, code, expiresAt]
+        );
+
+        // In production, send this via email. For now, we return it for the demo/tutorial.
+        console.log(`🔑 PASSWORD RESET CODE FOR ${email}: ${code}`);
+        res.json({ success: true, message: "Reset code sent to your email.", demoCode: code });
+    } catch (error) { next(error); }
+});
+
+app.post('/api/auth/reset-password', validate(schemas.resetPassword), async (req, res, next) => {
+    const { email, code, newPassword } = req.body;
+    try {
+        const [record] = await pool.query('SELECT * FROM password_resets WHERE email = ? AND token = ? AND expires_at > NOW()', [email, code]);
+        
+        if (record.length === 0) {
+            return res.status(400).json({ error: "Invalid or expired reset code." });
+        }
+
+        const hashed = await bcrypt.hash(newPassword, 10);
+        await pool.query('UPDATE users SET password = ? WHERE email = ?', [hashed, email]);
+        await pool.query('DELETE FROM password_resets WHERE email = ?', [email]);
+
+        res.json({ success: true, message: "Password updated successfully." });
+    } catch (error) { next(error); }
 });
 
 // --- WEBHOOKS (VERIFIED) ---
