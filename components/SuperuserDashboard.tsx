@@ -983,7 +983,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                 <Tooltip 
                                     contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#fff', borderRadius: '8px' }}
                                     itemStyle={{ color: '#fff' }}
-                                    formatter={(value: number) => [`GHS ${value.toFixed(2)}`, 'Revenue']}
+                                    formatter={(value: any) => [`GHS ${Number(value || 0).toFixed(2)}`, 'Revenue']}
                                 />
                                 <Area type="monotone" dataKey="revenue" stroke="#10b981" fillOpacity={1} fill="url(#colorRevenue)" />
                             </AreaChart>
@@ -2604,29 +2604,52 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-600 p-4 shadow-sm">
                                  <h5 className="font-bold text-gray-900 dark:text-white text-sm uppercase tracking-wider mb-4 border-b border-gray-100 dark:border-gray-700 pb-2">Visual Verification</h5>
                                  
-                                 <div className="grid grid-cols-2 gap-4">
+                                 <div className="space-y-4">
                                      {/* Live Photo */}
                                      <div className="space-y-2">
                                          <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase text-center">Live Capture</p>
-                                         <div className="aspect-square bg-gray-100 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden relative">
+                                         <div className="h-40 w-40 mx-auto bg-gray-100 dark:bg-gray-900 rounded-full border border-gray-200 dark:border-gray-600 overflow-hidden relative shadow-sm">
                                              <img src={selectedUserForKYC.avatar} alt="Live Capture" className="w-full h-full object-cover" />
                                          </div>
                                      </div>
 
-                                     {/* ID Document */}
-                                     <div className="space-y-2">
-                                         <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase text-center">ID Document</p>
-                                         <div className="aspect-square bg-gray-100 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden relative group cursor-zoom-in">
-                                             {selectedUserForKYC.idDocumentUrl ? (
-                                                 <img src={selectedUserForKYC.idDocumentUrl} alt="ID Document" className="w-full h-full object-cover" />
-                                             ) : (
-                                                 <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
-                                                     <FileText className="w-8 h-8 mb-1" />
-                                                     <span className="text-[10px]">No ID</span>
-                                                 </div>
-                                             )}
-                                             <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                 <Eye className="w-6 h-6 text-white" />
+                                     <div className="grid grid-cols-2 gap-4">
+                                         {/* ID Front */}
+                                         <div className="space-y-2">
+                                             <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase text-center">Card Front</p>
+                                             <div className="aspect-[3/2] bg-gray-100 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden relative group cursor-zoom-in shadow-sm">
+                                                 {selectedUserForKYC.kycDocumentFront ? (
+                                                     <img src={selectedUserForKYC.kycDocumentFront} alt="ID Front" className="w-full h-full object-cover" />
+                                                 ) : (
+                                                     <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 bg-gray-50 dark:bg-gray-800">
+                                                         <FileText className="w-6 h-6 mb-1" />
+                                                         <span className="text-[10px]">Missing Front</span>
+                                                     </div>
+                                                 )}
+                                                 {selectedUserForKYC.kycDocumentFront && (
+                                                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                         <Eye className="w-6 h-6 text-white" />
+                                                     </div>
+                                                 )}
+                                             </div>
+                                         </div>
+                                         {/* ID Back */}
+                                         <div className="space-y-2">
+                                             <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase text-center">Card Back</p>
+                                             <div className="aspect-[3/2] bg-gray-100 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden relative group cursor-zoom-in shadow-sm">
+                                                 {selectedUserForKYC.kycDocumentBack ? (
+                                                     <img src={selectedUserForKYC.kycDocumentBack} alt="ID Back" className="w-full h-full object-cover" />
+                                                 ) : (
+                                                     <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 bg-gray-50 dark:bg-gray-800">
+                                                         <FileText className="w-6 h-6 mb-1" />
+                                                         <span className="text-[10px]">Missing Back</span>
+                                                     </div>
+                                                 )}
+                                                 {selectedUserForKYC.kycDocumentBack && (
+                                                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                         <Eye className="w-6 h-6 text-white" />
+                                                     </div>
+                                                 )}
                                              </div>
                                          </div>
                                      </div>
