@@ -190,6 +190,25 @@ const dbConfig = {
 
 const pool = mysql.createPool(dbConfig);
 
+/**
+ * Helper to map DB snake_case columns to Frontend camelCase properties
+ */
+const mapUserRow = (user) => {
+    if (!user) return null;
+    return {
+        ...user,
+        phoneNumber: user.phone_number,
+        kycDocumentFront: user.kyc_document_front || user.kyc_document_image, // Fallback to legacy field
+        kycDocumentBack: user.kyc_document_back || null,
+        kycDocumentImage: user.kyc_document_image, // legacy
+        kycId: user.kyc_id,
+        status: user.status,
+        verificationStatus: user.verification_status,
+        joinDate: user.join_date,
+        reliabilityScore: user.reliability_score
+    };
+};
+
 async function initializeDatabase() {
     console.log('🛠️ Checking database schema and applying migrations...');
     const connection = await pool.getConnection();
@@ -211,6 +230,7 @@ async function initializeDatabase() {
                 status ENUM('ACTIVE', 'PENDING', 'SUSPENDED', 'INVITED', 'NEW') DEFAULT 'NEW',
                 verification_status ENUM('VERIFIED', 'PENDING', 'REJECTED', 'UNVERIFIED') DEFAULT 'UNVERIFIED',
                 join_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                last_login DATETIME,
                 reliability_score INT DEFAULT 100
             )
         `);
@@ -221,6 +241,14 @@ async function initializeDatabase() {
         const [kycBackCols] = await connection.query(`SHOW COLUMNS FROM users LIKE 'kyc_document_back'`);
         if (kycBackCols.length === 0) {
             await connection.query(`ALTER TABLE users ADD COLUMN kyc_document_back LONGTEXT AFTER kyc_document_front`);
+        }
+        const [metaCols] = await connection.query(`SHOW COLUMNS FROM users LIKE 'metadata'`);
+        if (metaCols.length === 0) {
+            await connection.query(`ALTER TABLE users ADD COLUMN metadata JSON AFTER reliability_score`);
+        }
+        const [ipCols] = await connection.query(`SHOW COLUMNS FROM users LIKE 'ip_address'`);
+        if (ipCols.length === 0) {
+            await connection.query(`ALTER TABLE users ADD COLUMN ip_address VARCHAR(45) AFTER metadata`);
         }
 
         const [passCols] = await connection.query(`SHOW COLUMNS FROM users LIKE 'password'`);
@@ -283,8 +311,12 @@ async function initializeDatabase() {
         if (groupCols.length === 0) {
             await connection.query(`ALTER TABLE savings_groups ADD COLUMN payout_schedule JSON`);
         }
+        
+        // 🛡️ SECURITY: Ensure image columns are LONGTEXT to prevent data truncation
         await connection.query(`ALTER TABLE users MODIFY COLUMN avatar LONGTEXT`);
-        await connection.query(`ALTER TABLE users MODIFY COLUMN kyc_document_image LONGTEXT`);
+        await connection.query(`ALTER TABLE users MODIFY COLUMN kyc_document_image LONGTEXT`); // legacy
+        await connection.query(`ALTER TABLE users MODIFY COLUMN kyc_document_front LONGTEXT`);
+        await connection.query(`ALTER TABLE users MODIFY COLUMN kyc_document_back LONGTEXT`);
         await connection.query(`ALTER TABLE savings_groups MODIFY COLUMN icon LONGTEXT`);
 
         // Update frequency enum to include new options (Yearly, Daily)
@@ -446,7 +478,7 @@ app.get('/api/check-health', (req, res) => {
 // --- AUTHENTICATION API (PUBLIC) ---
 
 app.post('/api/auth/register', validate(schemas.register), async (req, res, next) => {
-    const { id, name, email, password, phoneNumber, avatar, kycDocumentFront, kycDocumentBack, occupation, location, kycId } = req.body;
+    const { id, name, email, password, phoneNumber, avatar, kycDocumentFront, kycDocumentBack, occupation, location, kycId, metadata } = req.body;
     try {
         // 🛡️ SECURITY: Backend validation to ensure front and back ID images are unique
         if (kycDocumentFront === kycDocumentBack) {
@@ -457,10 +489,10 @@ app.post('/api/auth/register', validate(schemas.register), async (req, res, next
         if (existing.length > 0) return res.status(409).json({ error: "Email already registered." });
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        const sql = `INSERT INTO users (id, name, email, password, role, phone_number, avatar, kyc_document_front, kyc_document_back, occupation, location, kyc_id, status, verification_status) 
-                     VALUES (?, ?, ?, ?, 'MEMBER', ?, ?, ?, ?, ?, ?, ?, 'PENDING', 'PENDING')`;
+        const sql = `INSERT INTO users (id, name, email, password, role, phone_number, avatar, kyc_document_front, kyc_document_back, occupation, location, kyc_id, status, verification_status, metadata, ip_address) 
+                     VALUES (?, ?, ?, ?, 'MEMBER', ?, ?, ?, ?, ?, ?, ?, 'PENDING', 'PENDING', ?, ?)`;
         
-        await pool.query(sql, [id, name, email, hashedPassword, phoneNumber, avatar, kycDocumentFront, kycDocumentBack, occupation, location, kycId]);
+        await pool.query(sql, [id, name, email, hashedPassword, phoneNumber, avatar, kycDocumentFront, kycDocumentBack, occupation, location, kycId, metadata || null, req.ip]);
         
         const token = jwt.sign({ id, email, role: 'MEMBER' }, JWT_SECRET, { expiresIn: '24h' });
         res.status(201).json({ success: true, token });
@@ -780,7 +812,7 @@ app.delete('/api/groups/:id', authenticateToken, authorizeRoles('SUPERUSER'), as
 app.get('/api/users', authenticateToken, authorizeRoles('SUPERUSER'), async (req, res, next) => {
     try {
         const [rows] = await pool.query('SELECT * FROM users ORDER BY join_date DESC');
-        res.json(rows);
+        res.json(rows.map(mapUserRow));
     } catch (error) {
         next(error);
     }
@@ -814,7 +846,7 @@ app.get('/api/users/:email', authenticateToken, async (req, res, next) => {
             return res.status(403).json({ error: "Access denied." });
         }
         const [rows] = await pool.query('SELECT * FROM users WHERE email = ?', [req.params.email]);
-        if (rows.length > 0) res.json(rows[0]);
+        if (rows.length > 0) res.json(mapUserRow(rows[0]));
         else res.status(404).json({ message: "User not found" });
     } catch (error) {
         next(error);
@@ -822,7 +854,7 @@ app.get('/api/users/:email', authenticateToken, async (req, res, next) => {
 });
 
 app.put('/api/users/:id', authenticateToken, async (req, res) => {
-    const { status, verificationStatus, role, reliabilityScore, avatar, kycDocumentImage, name, occupation, phoneNumber } = req.body;
+    const { status, verificationStatus, role, reliabilityScore, avatar, kycDocumentFront, kycDocumentBack, name, occupation, phoneNumber } = req.body;
     const targetId = req.params.id;
     const requesterId = req.user.id;
 
@@ -842,7 +874,8 @@ app.put('/api/users/:id', authenticateToken, async (req, res) => {
     if (isSuper && role) { updates.push('role = ?'); values.push(role); }
     if (reliabilityScore !== undefined) { updates.push('reliability_score = ?'); values.push(reliabilityScore); }
     if (avatar) { updates.push('avatar = ?'); values.push(avatar); }
-    if (kycDocumentImage) { updates.push('kyc_document_image = ?'); values.push(kycDocumentImage); }
+    if (kycDocumentFront) { updates.push('kyc_document_front = ?'); values.push(kycDocumentFront); }
+    if (kycDocumentBack) { updates.push('kyc_document_back = ?'); values.push(kycDocumentBack); }
     if (name) { updates.push('name = ?'); values.push(name); }
     if (occupation) { updates.push('occupation = ?'); values.push(occupation); }
     if (phoneNumber) { updates.push('phone_number = ?'); values.push(phoneNumber); }

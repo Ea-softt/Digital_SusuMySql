@@ -445,8 +445,17 @@ const App: React.FC = () => {
         return;
       }
       
+      // Detect Device/Browser for KYC metadata
+      const ua = navigator.userAgent;
+      const deviceInfo = {
+          device: /mobile|android|iphone|ipad/i.test(ua) ? "Mobile Device" : "Desktop Computer",
+          os: /win/i.test(ua) ? "Windows" : /mac/i.test(ua) ? "MacOS" : /linux/i.test(ua) ? "Linux" : "Unknown OS",
+          browser: /chrome|crios/i.test(ua) ? "Chrome" : /firefox/i.test(ua) ? "Firefox" : /safari/i.test(ua) && !/chrome/i.test(ua) ? "Safari" : "Web Browser",
+          userAgent: ua
+      };
+
       // Final User Construction and API call happens here...
-      const newUser: User = {
+      const newUser: User & { metadata?: string } = {
           id: `u${Date.now()}`,
           name: name,
           email: email,
@@ -461,7 +470,8 @@ const App: React.FC = () => {
           kycDocumentBack: idBackImage || undefined,
           status: 'PENDING',
           verificationStatus: 'PENDING',
-          isFaceVerified: true, 
+          isFaceVerified: true,
+          metadata: JSON.stringify(deviceInfo), // Store device context for verification
           joinDate: new Date().toISOString().split('T')[0],
           reliabilityScore: 100,
           memberships: []
