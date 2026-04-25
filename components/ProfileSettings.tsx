@@ -67,7 +67,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ user, onUpdate
         canvasRef.current.width = videoRef.current.videoWidth;
         canvasRef.current.height = videoRef.current.videoHeight;
         ctx.drawImage(videoRef.current, 0, 0);
-        setAvatar(canvasRef.current.toDataURL('image/png'));
+        setAvatar(canvasRef.current.toDataURL('image/jpeg', 0.7));
         setIsCameraOpen(false);
       }
     }

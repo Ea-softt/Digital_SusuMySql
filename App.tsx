@@ -157,7 +157,7 @@ const App: React.FC = () => {
   }, [isDarkMode]);
 
   // 🛡️ Intelligent Image Quality Analysis
-  const analyzeImageQuality = (canvas: HTMLCanvasElement) => {
+  const analyzeImageQuality = (canvas: HTMLCanvasElement, mode: 'profile' | 'idFront' | 'idBack') => {
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return { status: 'bad' as const, message: 'Processing error.' };
 
@@ -167,25 +167,50 @@ const App: React.FC = () => {
     
     let totalBrightness = 0;
     let edgeScore = 0;
+    let centerEdgeScore = 0;
+    let centerPixels = 0;
+
+    // Define the "Target Area" based on the UI overlays
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const targetRadius = Math.min(width, height) * 0.3; // Approx size of the green circle
 
     // Sample pixels to determine brightness and focus (Laplacian variance proxy)
     for (let i = 0; i < data.length; i += 4) {
+        const x = (i / 4) % width;
+        const y = Math.floor((i / 4) / width);
         const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
         totalBrightness += avg;
 
         if (i < data.length - 4) {
             const nextAvg = (data[i + 4] + data[i + 5] + data[i + 6]) / 3;
-            edgeScore += Math.abs(avg - nextAvg);
+            const diff = Math.abs(avg - nextAvg);
+            edgeScore += diff;
+
+            // Heuristic: Check for detail concentration in the guide area (circle/frame)
+            const distFromCenter = Math.sqrt(Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2));
+            if (distFromCenter < targetRadius) {
+                centerEdgeScore += diff;
+                centerPixels++;
+            }
         }
     }
 
     const brightness = totalBrightness / (width * height);
     const clarity = edgeScore / (width * height);
+    const centerClarity = centerPixels > 0 ? centerEdgeScore / centerPixels : 0;
 
-    // Strict thresholds: Only accept high clarity and balanced lighting
-    if (brightness < 60) return { status: 'bad' as const, message: 'Subject is too dark. Increase lighting.' };
-    if (brightness > 225) return { status: 'bad' as const, message: 'Subject is overexposed. Reduce glare.' };
-    if (clarity < 22) return { status: 'bad' as const, message: 'Image is too blurry. Hold steady and ensure focus.' };
+    // Forgiving thresholds: Allow for moderate lighting and minor blur while still ensuring basic quality
+    if (brightness < 45) return { status: 'bad' as const, message: 'Subject is too dark. Increase lighting.' };
+    if (brightness > 235) return { status: 'bad' as const, message: 'Subject is overexposed. Reduce glare.' };
+
+    // If it's a profile photo, we strictly check that the center (the green circle) has enough detail/contrast
+    // This prevents empty backgrounds or off-center captures from passing.
+    if (mode === 'profile' && centerClarity < 2) {
+        return { status: 'bad' as const, message: 'Face not detected in the circle. Please center your face.' };
+    }
+
+    if (clarity < 2) return { status: 'bad' as const, message: 'Image is too blurry. Hold steady and ensure focus.' };
 
     return { status: 'ok' as const, message: 'Perfect! Image is clear and well-positioned.' };
   };
@@ -205,7 +230,8 @@ const App: React.FC = () => {
         context.drawImage(videoRef.current, 0, 0);
         context.setTransform(1, 0, 0, 1, 0, 0);
 
-        const dataUrl = canvasRef.current.toDataURL('image/png');
+        // Use JPEG with 0.7 quality to significantly reduce payload size for the backend
+        const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.7);
         
         setIsAnalyzing(true);
         setAnalysisResult(null);
@@ -213,7 +239,7 @@ const App: React.FC = () => {
         // Processing delay to simulate AI analysis
         await new Promise(resolve => setTimeout(resolve, 1200));
         
-        const result = analyzeImageQuality(canvasRef.current);
+        const result = analyzeImageQuality(canvasRef.current, cameraMode);
         setAnalysisResult(result);
 
         if (result.status === 'ok') {
@@ -539,7 +565,7 @@ const App: React.FC = () => {
 
              {/* 🤖 Analysis Overlay */}
              {(isAnalyzing || analysisResult) && (
-                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
+                <div className="absolute inset-0 z-20 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
                     {isAnalyzing ? (
                         <>
                             <RefreshCw className="w-12 h-12 text-primary-400 animate-spin mb-4" />
@@ -558,7 +584,7 @@ const App: React.FC = () => {
              )}
 
              <canvas ref={canvasRef} className="hidden" />
-             <button onClick={() => setIsCameraOpen(false)} className="absolute top-4 right-4 bg-gray-800/80 text-white p-3 rounded-full hover:bg-gray-700 transition-colors backdrop-blur-sm">
+             <button onClick={() => setIsCameraOpen(false)} className="absolute top-4 right-4 z-30 bg-gray-800/80 text-white p-3 rounded-full hover:bg-gray-700 transition-colors backdrop-blur-sm">
                 <X className="w-6 h-6" />
              </button>
              <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-black via-black/80 to-transparent flex justify-center">
