@@ -42,7 +42,7 @@ app.use(helmet({
 // 🛡️ PRODUCTION HARDENING: Rate Limiting (Prevents Brute Force/DoS)
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 1000, // Increased limit for development/debugging
+    max: 100, // Limit each IP to 100 requests per window
     message: { error: "Too many requests from this IP, please try again after 15 minutes" }
 });
 
@@ -448,6 +448,11 @@ app.get('/api/check-health', (req, res) => {
 app.post('/api/auth/register', validate(schemas.register), async (req, res, next) => {
     const { id, name, email, password, phoneNumber, avatar, kycDocumentFront, kycDocumentBack, occupation, location, kycId } = req.body;
     try {
+        // 🛡️ SECURITY: Backend validation to ensure front and back ID images are unique
+        if (kycDocumentFront === kycDocumentBack) {
+            return res.status(400).json({ error: "Front and back ID documents cannot be the same image." });
+        }
+
         const [existing] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
         if (existing.length > 0) return res.status(409).json({ error: "Email already registered." });
 
@@ -864,11 +869,17 @@ app.delete('/api/users/:id', authorizeRoles('SUPERUSER'), async (req, res, next)
 });
 
 app.post('/api/transactions', async (req, res, next) => {
-    const { id, userId, groupId, type, amount, verifierId } = req.body;
+    // 🛡️ SECURITY: Never trust 'userId' from the frontend body
+    const { id, groupId, type, amount, verifierId } = req.body;
+    const userId = req.user.id; 
     
     // 🛡️ FRAUD PREVENTION: Only admins can mark transactions as COMPLETED. 
     // Users can only create PENDING transactions.
     const status = (req.user.role === 'SUPERUSER' || req.user.role === 'ADMIN') ? (req.body.status || 'PENDING') : 'PENDING';
+
+    if (!id || !type || !amount) {
+        return res.status(400).json({ error: "Missing required transaction data." });
+    }
 
     if (userId !== req.user.id && req.user.role !== 'SUPERUSER') {
         return res.status(403).json({ error: "Access denied." });
@@ -1091,8 +1102,10 @@ app.get('/api/group-messages/:groupId', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/group-messages', authenticateToken, async (req, res) => {
-    const { id, groupId, senderId, text, type = 'text', timestamp } = req.body;
-    if (senderId !== req.user.id) return res.status(403).json({ error: "Cannot spoof sender ID." });
+    const { id, groupId, text, type = 'text', timestamp } = req.body;
+    
+    // 🛡️ SECURITY: Use ID from token to prevent impersonation
+    const senderId = req.user.id;
     
     const [membership] = await pool.query(
         'SELECT 1 FROM group_memberships WHERE user_id = ? AND group_id = ? AND status = "ACTIVE"',

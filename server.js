@@ -3,10 +3,22 @@ const express = require('express');
 const https = require('https');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const helmet = require('helmet');
+const { rateLimit } = require('express-rate-limit');
 
 const app = express();
+
+// 🛡️ SECURITY: Add security headers and limit requests
+app.use(helmet());
 app.use(cors());
 app.use(bodyParser.json());
+
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 50, // Stricter limit for financial routes
+    message: { error: "Too many financial requests. Try again later." }
+});
+app.use('/api/paystack/withdraw', limiter);
 
 const SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 const PUBLIC_KEY = process.env.PAYSTACK_PUBLIC_KEY;
@@ -84,6 +96,11 @@ app.post('/api/paystack/withdraw', async (req, res) => {
     console.log(`[POST] ${req.url} - Processing withdrawal for:`, req.body.recipientEmail);
     const { amount, recipientEmail, accountNumber, provider, userId } = req.body;
 
+    // 🛡️ SECURITY: Basic validation before sending to Paystack
+    if (!amount || amount <= 0 || !accountNumber) {
+        return res.status(400).json({ success: false, message: "Invalid withdrawal parameters." });
+    }
+
     try {
         // 1. Create a Transfer Recipient (Mobile Money)
         const recipient = await paystackRequest('/transferrecipient', 'POST', {
@@ -114,9 +131,10 @@ app.post('/api/paystack/withdraw', async (req, res) => {
 
     } catch (error) {
         console.error('Withdrawal Error:', error.message);
-        res.status(500).json({ 
+        // 🛡️ SECURITY: Don't leak raw internal error objects
+        res.status(500).json({
             success: false, 
-            message: error.message 
+            message: "Withdrawal could not be completed at this time." 
         });
     }
 });

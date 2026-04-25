@@ -94,21 +94,21 @@ const App: React.FC = () => {
   useEffect(() => {
     const restoreSession = async () => {
       const savedEmail = localStorage.getItem(SESSION_KEY);
-      if (savedEmail) {
-        // We assume the token is still in localStorage and syncData handles it
-        // For full session verification, we'd hit a /api/auth/me route here.
+      if (savedEmail && db.getServerStatus() !== false) {
+        await refreshData();
       }
       setIsRestoringSession(false);
-      refreshData();
     };
 
     restoreSession();
 
     const interval = setInterval(() => {
-        if (!currentUser) refreshData();
+        // Only poll for updates if the user is actually logged in
+        // This prevents 401 errors from unauthorized background requests
+        if (currentUser) refreshData();
     }, 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [currentUser, refreshData]);
 
   useEffect(() => {
     if (authMode === 'register') {
@@ -393,7 +393,7 @@ const App: React.FC = () => {
               }
           }
       } catch (err) {
-          setNotification({ type: 'error', message: 'Connection refused. Ensure backend is running on port 3001.' });
+          setNotification({ type: 'error', message: 'Connection refused. Ensure backend is running on port 3000.' });
       }
       setIsLoading(false);
       return;
@@ -434,6 +434,13 @@ const App: React.FC = () => {
       // Validation for Step 2 (Final submission)
       if (!idFrontImage || !idBackImage) {
         setNotification({ type: 'error', message: 'Both front and back pictures of your ID are required.' });
+        setIsLoading(false);
+        return;
+      }
+      
+      // 🛡️ SECURITY: Prevent using the same image for both front and back
+      if (idFrontImage === idBackImage) {
+        setNotification({ type: 'error', message: 'ID Card front and back images cannot be the same.' });
         setIsLoading(false);
         return;
       }
