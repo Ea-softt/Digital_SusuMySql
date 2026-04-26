@@ -2618,8 +2618,9 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                          <div className="space-y-2">
                                              <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase text-center">Card Front</p>
                                              <div className="aspect-[3/2] bg-gray-100 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden relative group cursor-zoom-in shadow-sm">
-                                                 {selectedUserForKYC.kycDocumentFront ? (
-                                                     <img src={selectedUserForKYC.kycDocumentFront} alt="ID Front" className="w-full h-full object-cover" />
+                                                {/* Check both camelCase and snake_case naming for maximum reliability */}
+                                                {(selectedUserForKYC.kycDocumentFront || (selectedUserForKYC as any).kyc_document_front || selectedUserForKYC.idDocumentUrl || selectedUserForKYC.kycDocumentImage) ? (
+                                                    <img src={selectedUserForKYC.kycDocumentFront || (selectedUserForKYC as any).kyc_document_front || selectedUserForKYC.idDocumentUrl || selectedUserForKYC.kycDocumentImage} alt="ID Front" className="w-full h-full object-cover" />
                                                  ) : (
                                                      <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 bg-gray-50 dark:bg-gray-800">
                                                          <FileText className="w-6 h-6 mb-1" />
@@ -2637,8 +2638,8 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                          <div className="space-y-2">
                                              <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase text-center">Card Back</p>
                                              <div className="aspect-[3/2] bg-gray-100 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden relative group cursor-zoom-in shadow-sm">
-                                                 {selectedUserForKYC.kycDocumentBack ? (
-                                                     <img src={selectedUserForKYC.kycDocumentBack} alt="ID Back" className="w-full h-full object-cover" />
+                                                 {(selectedUserForKYC.kycDocumentBack || (selectedUserForKYC as any).kyc_document_back || (selectedUserForKYC as any).kycDocumentBack) ? (
+                                                     <img src={selectedUserForKYC.kycDocumentBack || (selectedUserForKYC as any).kyc_document_back || (selectedUserForKYC as any).kycDocumentBack} alt="ID Back" className="w-full h-full object-cover" />
                                                  ) : (
                                                      <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 bg-gray-50 dark:bg-gray-800">
                                                          <FileText className="w-6 h-6 mb-1" />

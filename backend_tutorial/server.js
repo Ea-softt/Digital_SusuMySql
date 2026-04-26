@@ -198,14 +198,17 @@ const mapUserRow = (user) => {
     return {
         ...user,
         phoneNumber: user.phone_number,
-        kycDocumentFront: user.kyc_document_front || user.kyc_document_image, // Fallback to legacy field
-        kycDocumentBack: user.kyc_document_back || null,
+        // 🛡️ DATA INTEGRITY: Robust mapping for image fields to prevent "Missing" UI states
+        kycDocumentFront: user.kyc_document_front || user.kycDocumentFront || user.kyc_document_image || user.idDocumentUrl || null,
+        kycDocumentBack: user.kyc_document_back || user.kycDocumentBack || null,
         kycDocumentImage: user.kyc_document_image, // legacy
         kycId: user.kyc_id,
         status: user.status,
-        verificationStatus: user.verification_status,
+        verificationStatus: user.verification_status || user.verificationStatus,
         joinDate: user.join_date,
-        reliabilityScore: user.reliability_score
+        reliabilityScore: user.reliability_score,
+        ipAddress: user.ip_address,
+        metadata: typeof user.metadata === 'string' ? JSON.parse(user.metadata) : user.metadata
     };
 };
 
@@ -227,13 +230,33 @@ async function initializeDatabase() {
                 occupation VARCHAR(100),
                 location VARCHAR(150),
                 kyc_id VARCHAR(50),
+                kyc_document_front LONGTEXT,
+                kyc_document_back LONGTEXT,
                 status ENUM('ACTIVE', 'PENDING', 'SUSPENDED', 'INVITED', 'NEW') DEFAULT 'NEW',
                 verification_status ENUM('VERIFIED', 'PENDING', 'REJECTED', 'UNVERIFIED') DEFAULT 'UNVERIFIED',
                 join_date DATETIME DEFAULT CURRENT_TIMESTAMP,
                 last_login DATETIME,
+                metadata JSON,
+                ip_address VARCHAR(45),
                 reliability_score INT DEFAULT 100
             )
         `);
+
+        // 🛡️ DATA INTEGRITY: Force columns to LONGTEXT immediately to prevent Base64 truncation
+        console.log('🔄 Ensuring image columns have maximum storage capacity...');
+        await connection.query(`ALTER TABLE users MODIFY COLUMN avatar LONGTEXT`);
+        await connection.query(`ALTER TABLE users MODIFY COLUMN kyc_document_image LONGTEXT`);
+        await connection.query(`ALTER TABLE users MODIFY COLUMN kyc_document_front LONGTEXT`);
+        await connection.query(`ALTER TABLE users MODIFY COLUMN kyc_document_back LONGTEXT`);
+        await connection.query(`ALTER TABLE savings_groups MODIFY COLUMN icon LONGTEXT`);
+
+        // Migration checks for missing columns
+        console.log('🔄 Enforcing LONGTEXT storage for image data...');
+        await connection.query(`ALTER TABLE users MODIFY COLUMN avatar LONGTEXT`);
+        await connection.query(`ALTER TABLE users MODIFY COLUMN kyc_document_image LONGTEXT`);
+        const [kycImgCols] = await connection.query(`SHOW COLUMNS FROM users LIKE 'kyc_document_image'`);
+        if (kycImgCols.length === 0) await connection.query(`ALTER TABLE users ADD COLUMN kyc_document_image LONGTEXT AFTER avatar`);
+
         const [kycFrontCols] = await connection.query(`SHOW COLUMNS FROM users LIKE 'kyc_document_front'`);
         if (kycFrontCols.length === 0) {
             await connection.query(`ALTER TABLE users ADD COLUMN kyc_document_front LONGTEXT AFTER kyc_id`);
@@ -312,9 +335,7 @@ async function initializeDatabase() {
             await connection.query(`ALTER TABLE savings_groups ADD COLUMN payout_schedule JSON`);
         }
         
-        // 🛡️ SECURITY: Ensure image columns are LONGTEXT to prevent data truncation
-        await connection.query(`ALTER TABLE users MODIFY COLUMN avatar LONGTEXT`);
-        await connection.query(`ALTER TABLE users MODIFY COLUMN kyc_document_image LONGTEXT`); // legacy
+        // Final verification of column types
         await connection.query(`ALTER TABLE users MODIFY COLUMN kyc_document_front LONGTEXT`);
         await connection.query(`ALTER TABLE users MODIFY COLUMN kyc_document_back LONGTEXT`);
         await connection.query(`ALTER TABLE savings_groups MODIFY COLUMN icon LONGTEXT`);

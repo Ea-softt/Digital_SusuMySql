@@ -73,11 +73,14 @@ export interface User {
   // KYC (Know Your Customer) fields
   verificationStatus?: 'VERIFIED' | 'PENDING' | 'REJECTED' | 'UNVERIFIED';
   idDocumentUrl?: string;
+  kycDocumentImage?: string; // Legacy single image field for ID documents
   kycDocumentFront?: string;
   kycDocumentBack?: string;
   isFaceVerified?: boolean;
   rejectionReason?: string;
-  
+  ipAddress?: string; // Captures device IP for fraud prevention
+  metadata?: string | any; // Stores device intelligence (OS, Browser, etc.)
+
   // Auth & Security
   twoFactorEnabled?: boolean;
   authProvider?: 'email' | 'google';

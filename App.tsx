@@ -455,7 +455,7 @@ const App: React.FC = () => {
       };
 
       // Final User Construction and API call happens here...
-      const newUser: User & { metadata?: string } = {
+      const newUser: User = {
           id: `u${Date.now()}`,
           name: name,
           email: email,
