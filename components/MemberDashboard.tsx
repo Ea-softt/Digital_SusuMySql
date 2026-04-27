@@ -55,7 +55,12 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
         db.getGroupContributionTransactions(group.id).then(setGroupContributions);
 
         // Fetch memberships to filter members list
-        fetch('http://localhost:3001/api/group-memberships')
+        const token = localStorage.getItem('token');
+        fetch('http://localhost:3001/api/group-memberships', {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        })
             .then(res => res.json())
             .then((data: any[]) => {
                 const ids = new Set<string>();
@@ -79,7 +84,11 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
             .catch(err => console.error("Error fetching memberships:", err));
 
         // Fetch current user's specific status in this group
-        fetch(`http://localhost:3001/api/group-membership/status/${userId}/${group.id}`)
+        fetch(`http://localhost:3001/api/group-membership/status/${userId}/${group.id}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        })
             .then(res => res.json())
             .then(data => setUserGroupStatus(data.status))
             .catch(err => console.error("Error fetching user group status:", err));

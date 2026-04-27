@@ -1293,9 +1293,23 @@ app.delete('/api/notifications/:id', authenticateToken, async (req, res, next) =
     } catch (error) { next(error); }
 });
 
-app.get('/api/group-memberships', authorizeRoles('SUPERUSER'), async (req, res, next) => {
+app.get('/api/group-memberships', authenticateToken, async (req, res, next) => {
     try {
-        const [rows] = await pool.query('SELECT * FROM group_memberships');
+        // 🛡️ SECURITY: Ownership Check
+        // Superusers see everything. Regular users/admins only see memberships 
+        // for the groups they belong to.
+        let sql = 'SELECT * FROM group_memberships';
+        let params = [];
+
+        if (req.user.role !== 'SUPERUSER') {
+            sql = `
+                SELECT gm.* FROM group_memberships gm
+                WHERE gm.group_id IN (SELECT group_id FROM group_memberships WHERE user_id = ?)
+            `;
+            params = [req.user.id];
+        }
+
+        const [rows] = await pool.query(sql, params);
         res.json(rows);
     } catch (error) { next(error); }
 });

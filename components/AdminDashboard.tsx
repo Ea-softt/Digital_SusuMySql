@@ -118,7 +118,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
 
     const fetchGroupMembers = async () => {
         try {
-            const response = await fetch(`http://localhost:3001/api/group-memberships`);
+            const token = localStorage.getItem('token');
+            const response = await fetch(`http://localhost:3001/api/group-memberships`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
             if (response.ok) {
                 const allMemberships = await response.json();
                 if (Array.isArray(allMemberships)) {
