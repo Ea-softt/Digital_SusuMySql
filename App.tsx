@@ -21,7 +21,8 @@ type AuthMode = 'login' | 'register' | 'forgot' | '2fa';
 const SESSION_KEY = 'susu_auth_session_email';
 const LAST_GROUP_KEY = 'susu_last_active_group_id';
 const REG_DRAFT_KEY = 'susu_registration_draft';
-const API_URL = '/api';
+const TOKEN_KEY = 'token'; // 🛡️ Constant for JWT storage
+const API_URL = 'http://localhost:3001/api';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -281,9 +282,11 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLogin = (user: User, isRestoring = false) => {
+  const handleLogin = (user: User, isRestoring = false, token?: string) => {
     setCurrentUser(user);
-    if (!isRestoring) {
+    if (!isRestoring && token) {
+        // 🛡️ SECURITY: Persist the JWT for all future API calls
+        localStorage.setItem(TOKEN_KEY, token);
         localStorage.setItem(SESSION_KEY, user.email);
     }
     
@@ -306,6 +309,7 @@ const App: React.FC = () => {
   const handleLogout = () => {
     db.logout();
     localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(TOKEN_KEY); // 🛡️ Clear token on logout
     localStorage.removeItem(LAST_GROUP_KEY);
     setCurrentUser(null);
     setContextUser(null);
@@ -381,9 +385,10 @@ const App: React.FC = () => {
 
     if (authMode === 'login') {
       try {
-          const existingUser = await db.login(email, password);
-          if (existingUser) {
-              handleLogin(existingUser);
+          // db.login now returns { user, token }
+          const result = await db.login(email, password);
+          if (result?.user) {
+              handleLogin(result.user, false, result.token);
           } else {
               const status = db.getServerStatus();
               if (status === false) {
@@ -455,7 +460,7 @@ const App: React.FC = () => {
       };
 
       // Final User Construction and API call happens here...
-      const newUser: User = {
+      const newUser: any = {
           id: `u${Date.now()}`,
           name: name,
           email: email,
@@ -478,9 +483,10 @@ const App: React.FC = () => {
       };
 
       try {
-          await db.registerUser(newUser, password);
+          const result = await db.registerUser(newUser, password);
           localStorage.removeItem(REG_DRAFT_KEY);
-          handleLogin(newUser);
+          // Automatically log in with the token from registration
+          handleLogin(result.user, false, result.token);
           setNotification({ type: 'info', message: 'Registration successful! Your account is pending verification by the system administrator.' });
       } catch (err) {
           setNotification({ type: 'error', message: 'Registration failed. Backend connection issue.' });

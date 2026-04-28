@@ -61,7 +61,10 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                 'Authorization': `Bearer ${token}`
             }
         })
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                return res.json();
+            })
             .then((data: any[]) => {
                 const ids = new Set<string>();
                 const myVerifications: any[] = [];
@@ -89,7 +92,10 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                 'Authorization': `Bearer ${token}`
             }
         })
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                return res.json();
+            })
             .then(data => setUserGroupStatus(data.status))
             .catch(err => console.error("Error fetching user group status:", err));
         

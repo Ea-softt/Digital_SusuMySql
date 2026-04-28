@@ -42,7 +42,7 @@ app.use(helmet({
 // 🛡️ PRODUCTION HARDENING: Rate Limiting (Prevents Brute Force/DoS)
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per window
+    max: 200, // Increased for dashboard polling
     message: { error: "Too many requests from this IP, please try again after 15 minutes" }
 });
 
@@ -496,6 +496,17 @@ app.get('/api/check-health', (req, res) => {
     res.json({ status: 'online', database: 'connected' });
 });
 
+// 🛡️ GLOBAL JWT ENFORCEMENT
+// Protects all routes defined below this point unless explicitly excluded
+app.use('/api', (req, res, next) => {
+    const publicPaths = ['/check-health', '/auth/login', '/auth/register', '/auth/forgot-password', '/auth/reset-password'];
+    if (publicPaths.includes(req.path) || req.path.startsWith('/webhooks/')) {
+        return next();
+    }
+    // Enforce authentication for everything else
+    authenticateToken(req, res, next);
+});
+
 // --- AUTHENTICATION API (PUBLIC) ---
 
 app.post('/api/auth/register', validate(schemas.register), async (req, res, next) => {
@@ -588,15 +599,6 @@ app.post('/api/webhooks/paystack', async (req, res) => {
     res.sendStatus(200);
 });
 
-// --- GLOBAL JWT ENFORCEMENT & SECURITY ---
-
-app.use('/api', (req, res, next) => {
-    const publicPaths = ['/check-health', '/auth/login', '/auth/register', '/auth/forgot-password'];
-    if (publicPaths.includes(req.path) || req.path.startsWith('/webhooks/')) {
-        return next();
-    }
-    authenticateToken(req, res, next);
-});
 
 /**
  * Paystack Specific Endpoints
@@ -612,7 +614,7 @@ app.get('/api/paystack/key', authenticateToken, (req, res) => {
  * PLATFORM FINANCIALS: Initialize a payment record
  * Call this before redirecting the user to Paystack
  */
-app.post('/api/paystack/initialize-confirmation', authenticateToken, async (req, res) => {
+app.post('/api/paystack/initialize-confirmation', async (req, res) => {
     const { reference, access_code, amount, payment_type, metadata } = req.body;
     const userId = req.user.id;
 
@@ -631,7 +633,7 @@ app.post('/api/paystack/initialize-confirmation', authenticateToken, async (req,
 /**
  * PLATFORM FINANCIALS: Get all pending payments for Superuser review
  */
-app.get('/api/admin/financials/pending', authenticateToken, authorizeRoles('SUPERUSER'), async (req, res) => {
+app.get('/api/admin/financials/pending', authorizeRoles('SUPERUSER'), async (req, res) => {
     try {
         const [rows] = await pool.query(
             `SELECT pc.*, u.name as userName, u.email as userEmail 
@@ -649,7 +651,7 @@ app.get('/api/admin/financials/pending', authenticateToken, authorizeRoles('SUPE
 /**
  * PLATFORM FINANCIALS: Superuser manual approval
  */
-app.put('/api/admin/financials/approve-payment', authenticateToken, authorizeRoles('SUPERUSER'), async (req, res) => {
+app.put('/api/admin/financials/approve-payment', authorizeRoles('SUPERUSER'), async (req, res) => {
     const { reference } = req.body;
     const superuserId = req.user.id;
     const connection = await pool.getConnection();
@@ -675,7 +677,7 @@ app.put('/api/admin/financials/approve-payment', authenticateToken, authorizeRol
     }
 });
 
-app.post('/api/paystack/withdraw', authenticateToken, authorizeRoles('ADMIN', 'SUPERUSER'), async (req, res) => {
+app.post('/api/paystack/withdraw', authorizeRoles('ADMIN', 'SUPERUSER'), async (req, res) => {
     // We now get the userId from req.user (the verified token) 
     // instead of trusting req.body.userId
     const userId = req.user.id; 
@@ -727,16 +729,16 @@ app.post('/api/paystack/withdraw', authenticateToken, authorizeRoles('ADMIN', 'S
     }
 });
 
-app.get('/api/groups', authenticateToken, async (req, res, next) => {
+app.get('/api/groups', async (req, res, next) => {
     try {
-        const [rows] = await pool.query('SELECT * FROM savings_groups ORDER BY name ASC');
+        const [rows] = await pool.query('SELECT * FROM savings_groups WHERE status != "DELETED" ORDER BY name ASC');
         res.json(rows);
     } catch (error) {
         next(error);
     }
 });
 
-app.post('/api/groups', authenticateToken, validate(schemas.createGroup), async (req, res, next) => {
+app.post('/api/groups', validate(schemas.createGroup), async (req, res, next) => {
     // Use the ID from the token, not the request body
     const creatorId = req.user.id;
     const { id, name, contributionAmount, currency, frequency, inviteCode, welcomeMessage, icon, scheduledPayoutAmount } = req.body;
@@ -762,7 +764,7 @@ app.post('/api/groups', authenticateToken, validate(schemas.createGroup), async 
     }
 });
 
-app.put('/api/groups/:id', authenticateToken, async (req, res) => {
+app.put('/api/groups/:id', async (req, res) => {
     const { name, contributionAmount, currency, frequency, welcomeMessage, icon, payoutSchedule, scheduledPayoutAmount, callActive } = req.body;
     const groupId = req.params.id;
     const userId = req.user.id;
@@ -803,7 +805,7 @@ app.put('/api/groups/:id', authenticateToken, async (req, res) => {
     }
 });
 
-app.put('/api/groups/:id/status', authenticateToken, authorizeRoles('SUPERUSER'), async (req, res) => {
+app.put('/api/groups/:id/status', authorizeRoles('SUPERUSER'), async (req, res) => {
     const { status, approvedBy } = req.body;
     if (!['ACTIVE', 'REJECTED', 'PENDING_VERIFICATION', 'SUSPENDED'].includes(status)) {
         return res.status(400).json({ error: 'Invalid status' });
@@ -820,7 +822,7 @@ app.put('/api/groups/:id/status', authenticateToken, authorizeRoles('SUPERUSER')
     }
 });
 
-app.delete('/api/groups/:id', authenticateToken, authorizeRoles('SUPERUSER'), async (req, res) => {
+app.delete('/api/groups/:id', authorizeRoles('SUPERUSER'), async (req, res) => {
     try {
         // Soft delete to preserve transaction history for wallet access
         await pool.query('UPDATE savings_groups SET status = "DELETED" WHERE id = ?', [req.params.id]);
@@ -830,7 +832,7 @@ app.delete('/api/groups/:id', authenticateToken, authorizeRoles('SUPERUSER'), as
     }
 });
 
-app.get('/api/users', authenticateToken, authorizeRoles('SUPERUSER'), async (req, res, next) => {
+app.get('/api/users', authorizeRoles('SUPERUSER'), async (req, res, next) => {
     try {
         const [rows] = await pool.query('SELECT * FROM users ORDER BY join_date DESC');
         res.json(rows.map(mapUserRow));
@@ -840,7 +842,7 @@ app.get('/api/users', authenticateToken, authorizeRoles('SUPERUSER'), async (req
 });
 
 // --- GET USER'S GROUPS ---
-app.get('/api/users/:userId/groups', authenticateToken, async (req, res) => {
+app.get('/api/users/:userId/groups', async (req, res) => {
     // Identity Check: Users can only see their own memberships
     if (req.user.id !== req.params.userId && req.user.role !== 'SUPERUSER') {
         return res.status(403).json({ error: "Access denied." });
@@ -861,7 +863,7 @@ app.get('/api/users/:userId/groups', authenticateToken, async (req, res) => {
     }
 });
 
-app.get('/api/users/:email', authenticateToken, async (req, res, next) => {
+app.get('/api/users/:email', async (req, res, next) => {
     try {
         if (req.user.email !== req.params.email && req.user.role !== 'SUPERUSER') {
             return res.status(403).json({ error: "Access denied." });
@@ -874,7 +876,7 @@ app.get('/api/users/:email', authenticateToken, async (req, res, next) => {
     }
 });
 
-app.put('/api/users/:id', authenticateToken, async (req, res) => {
+app.put('/api/users/:id', async (req, res) => {
     const { status, verificationStatus, role, reliabilityScore, avatar, kycDocumentFront, kycDocumentBack, name, occupation, phoneNumber } = req.body;
     const targetId = req.params.id;
     const requesterId = req.user.id;
@@ -1004,7 +1006,7 @@ app.post('/api/transactions/bulk-rollback', async (req, res) => {
     }
 });
 
-app.get('/api/transactions/verification-pending/:userId', authenticateToken, async (req, res) => {
+app.get('/api/transactions/verification-pending/:userId', async (req, res) => {
     if (req.user.id !== req.params.userId && req.user.role !== 'SUPERUSER') {
         return res.status(403).json({ error: "Access denied." });
     }
@@ -1019,7 +1021,7 @@ app.get('/api/transactions/verification-pending/:userId', authenticateToken, asy
     }
 });
 
-app.put('/api/transactions/:id/verify', authenticateToken, authorizeRoles('ADMIN', 'SUPERUSER'), async (req, res) => {
+app.put('/api/transactions/:id/verify', authorizeRoles('ADMIN', 'SUPERUSER'), async (req, res) => {
     const { id } = req.params;
     const connection = await pool.getConnection();
     try {
@@ -1054,7 +1056,7 @@ app.put('/api/transactions/:id/verify', authenticateToken, authorizeRoles('ADMIN
     }
 });
 
-app.get('/api/transactions', authenticateToken, authorizeRoles('SUPERUSER'), async (req, res, next) => {
+app.get('/api/transactions', authorizeRoles('SUPERUSER'), async (req, res, next) => {
     try {
         const [rows] = await pool.query('SELECT t.*, u.name as userName FROM transactions t LEFT JOIN users u ON t.user_id = u.id ORDER BY t.date DESC');
         res.json(rows);
@@ -1063,7 +1065,7 @@ app.get('/api/transactions', authenticateToken, authorizeRoles('SUPERUSER'), asy
     }
 });
 
-app.get('/api/transactions/:userId', authenticateToken, async (req, res) => {
+app.get('/api/transactions/:userId', async (req, res) => {
     const requesterId = req.user.id;
     try {
         const { groupId } = req.query;
@@ -1089,7 +1091,7 @@ app.get('/api/transactions/:userId', authenticateToken, async (req, res) => {
     }
 });
 
-app.get('/api/groups/:groupId/transactions/contributions', authenticateToken, async (req, res) => {
+app.get('/api/groups/:groupId/transactions/contributions', async (req, res) => {
     const { groupId } = req.params;
     // Membership check
     const [membership] = await pool.query(
@@ -1111,7 +1113,7 @@ app.get('/api/groups/:groupId/transactions/contributions', authenticateToken, as
     }
 });
 
-app.get('/api/groups/:groupId/transactions/payouts', authenticateToken, async (req, res) => {
+app.get('/api/groups/:groupId/transactions/payouts', async (req, res) => {
     const { groupId } = req.params;
     const [membership] = await pool.query(
         'SELECT 1 FROM group_memberships WHERE user_id = ? AND group_id = ? AND status = "ACTIVE"',
@@ -1134,7 +1136,7 @@ app.get('/api/groups/:groupId/transactions/payouts', authenticateToken, async (r
 
 // --- GROUP CHAT MESSAGES API ---
 
-app.get('/api/group-messages/:groupId', authenticateToken, async (req, res) => {
+app.get('/api/group-messages/:groupId', async (req, res) => {
     const { groupId } = req.params;
     const [membership] = await pool.query(
         'SELECT 1 FROM group_memberships WHERE user_id = ? AND group_id = ? AND status = "ACTIVE"',
@@ -1155,7 +1157,7 @@ app.get('/api/group-messages/:groupId', authenticateToken, async (req, res) => {
     }
 });
 
-app.post('/api/group-messages', authenticateToken, async (req, res) => {
+app.post('/api/group-messages', async (req, res) => {
     const { id, groupId, text, type = 'text', timestamp } = req.body;
     
     // 🛡️ SECURITY: Use ID from token to prevent impersonation
@@ -1180,7 +1182,7 @@ app.post('/api/group-messages', authenticateToken, async (req, res) => {
     }
 });
 
-app.post('/api/groups/join', authenticateToken, async (req, res) => {
+app.post('/api/groups/join', async (req, res) => {
     const { userId, inviteCode } = req.body;
     if (userId !== req.user.id) return res.status(403).json({ error: "Access denied." });
     if (!inviteCode) {
@@ -1277,7 +1279,7 @@ app.post('/api/notifications', authorizeRoles('SUPERUSER'), async (req, res, nex
     }
 });
 
-app.put('/api/notifications/:id/read', authenticateToken, async (req, res) => {
+app.put('/api/notifications/:id/read', async (req, res) => {
     try {
         const [result] = await pool.query('UPDATE notifications SET is_read = 1 WHERE id = ? AND recipient_id = ?', [req.params.id, req.user.id]);
         if (result.affectedRows === 0) return res.status(404).json({ error: "Notification not found." });
@@ -1285,7 +1287,7 @@ app.put('/api/notifications/:id/read', authenticateToken, async (req, res) => {
     } catch (error) { next(error); }
 });
 
-app.delete('/api/notifications/:id', authenticateToken, async (req, res, next) => {
+app.delete('/api/notifications/:id', async (req, res, next) => {
     try {
         const [result] = await pool.query('DELETE FROM notifications WHERE id = ? AND recipient_id = ?', [req.params.id, req.user.id]);
         if (result.affectedRows === 0) return res.status(404).json({ error: "Notification not found." });
@@ -1293,7 +1295,7 @@ app.delete('/api/notifications/:id', authenticateToken, async (req, res, next) =
     } catch (error) { next(error); }
 });
 
-app.get('/api/group-memberships', authenticateToken, async (req, res, next) => {
+app.get('/api/group-memberships', async (req, res, next) => {
     try {
         // 🛡️ SECURITY: Ownership Check
         // Superusers see everything. Regular users/admins only see memberships 

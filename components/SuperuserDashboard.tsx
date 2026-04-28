@@ -150,7 +150,12 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   useEffect(() => {
       const fetchCreatorsAndMemberships = async () => {
           try {
-              const res = await fetch('http://localhost:3001/api/group-memberships');
+              const token = localStorage.getItem('token');
+              const res = await fetch('http://localhost:3001/api/group-memberships', {
+                  headers: {
+                      'Authorization': `Bearer ${token}`
+                  }
+              });
               const data = await res.json();
               if (Array.isArray(data)) {
                   setAllMemberships(data);
@@ -275,8 +280,12 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
       const newStatus = action === 'suspend' ? 'SUSPENDED' : 'ACTIVE';
       if (confirm(`Are you sure you want to ${action} this member?`)) {
           await db.updateGroupMembershipStatus(viewGroup.id, userId, newStatus);
-          // Refresh local membership list
-          const res = await fetch('http://localhost:3001/api/group-memberships');
+          const token = localStorage.getItem('token');
+          const res = await fetch('http://localhost:3001/api/group-memberships', {
+              headers: {
+                  'Authorization': `Bearer ${token}`
+              }
+          });
           const data = await res.json();
           setAllMemberships(data);
           onRefresh();
@@ -298,7 +307,12 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   // Fetch user groups when viewing user details
   useEffect(() => {
       if (viewUser) {
-          fetch(`http://localhost:3001/api/users/${viewUser.id}/groups`)
+          const token = localStorage.getItem('token');
+          fetch(`http://localhost:3001/api/users/${viewUser.id}/groups`, {
+              headers: {
+                  'Authorization': `Bearer ${token}`
+              }
+          })
             .then(res => res.json())
             .then(data => setViewUserGroups(Array.isArray(data) ? data : []))
             .catch(err => console.error("Failed to fetch user groups", err));
