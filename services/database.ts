@@ -185,7 +185,7 @@ class DatabaseService {
       return this.isServerOnline;
   }
 
-  async login(email: string, password: string): Promise<User | undefined> {
+  async login(email: string, password: string): Promise<{ user: User; token: string } | undefined> {
     try {
         const res = await fetch(`${API_BASE}/auth/login`, {
             method: 'POST',
@@ -200,15 +200,15 @@ class DatabaseService {
             // Lookup full profile
             const userRes = await this.apiFetch(`/users/${encodeURIComponent(email)}`);
             const u = await userRes.json();
-            const user = this.mapUser(u);
+            const user = this.mapUser(u); // Ensure the user object is correctly mapped
             await this.syncData(user.id);
-            return user;
+            return { user, token: data.token }; // Return the full object expected by App.tsx
         }
     } catch (e) { console.error(e); }
     return undefined;
   }
 
-  async registerUser(user: User, password: string): Promise<User> {
+  async registerUser(user: User, password: string): Promise<{ user: User; token: string }> {
     if (!this.isServerOnline) await this.syncData();
     if (this.isServerOnline) {
         try {
@@ -233,8 +233,8 @@ class DatabaseService {
                 const data = await res.json();
                 this.token = data.token;
                 localStorage.setItem('susu_jwt_token', data.token);
-                await this.syncData(user.id);
-                return user;
+                await this.syncData(user.id); // Sync data after successful registration
+                return { user, token: data.token }; // Return the full object expected by App.tsx
             } else {
                 const err = await res.json();
                 throw new Error(err.error || "Registration failed.");

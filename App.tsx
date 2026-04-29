@@ -22,7 +22,7 @@ const SESSION_KEY = 'susu_auth_session_email';
 const LAST_GROUP_KEY = 'susu_last_active_group_id';
 const REG_DRAFT_KEY = 'susu_registration_draft';
 const TOKEN_KEY = 'token'; // 🛡️ Constant for JWT storage
-const API_URL = 'http://localhost:3001/api';
+const API_URL = 'http://localhost:3000/api'; // 🔄 Updated to port 3000 to match your server
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -95,7 +95,10 @@ const App: React.FC = () => {
   useEffect(() => {
     const restoreSession = async () => {
       const savedEmail = localStorage.getItem(SESSION_KEY);
-      if (savedEmail && db.getServerStatus() !== false) {
+      const savedToken = localStorage.getItem(TOKEN_KEY);
+
+      // 🛡️ Only attempt to refresh data if both email AND token exist
+      if (savedEmail && savedToken && db.getServerStatus() !== false) {
         await refreshData();
       }
       setIsRestoringSession(false);
@@ -385,7 +388,6 @@ const App: React.FC = () => {
 
     if (authMode === 'login') {
       try {
-          // db.login now returns { user, token }
           const result = await db.login(email, password);
           if (result?.user) {
               handleLogin(result.user, false, result.token);
