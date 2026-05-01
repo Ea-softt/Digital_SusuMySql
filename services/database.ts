@@ -52,19 +52,21 @@ class DatabaseService {
       id: u.id || '',
       name: name,
       email: u.email || '',
-      phoneNumber: u.phone_number || '',
+      phoneNumber: u.phoneNumber || u.phone_number || '',
       role: (u.role as UserRole) || UserRole.MEMBER,
       avatar: this.isValidImage(u.avatar) 
         ? u.avatar 
         : `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&size=128`,
       occupation: u.occupation || '',
       location: u.location || '',
-      kycId: u.kyc_id || '',
+      kycId: u.kycId || u.kyc_id || '',
       status: u.status || 'NEW',
-      verificationStatus: u.verification_status || 'UNVERIFIED',
-      joinDate: u.join_date ? new Date(u.join_date).toISOString().split('T')[0] : '',
-      reliabilityScore: u.reliability_score || 0,
-      memberships: [] 
+      verificationStatus: u.verificationStatus || u.verification_status || 'UNVERIFIED',
+      joinDate: (u.joinDate || u.join_date) ? new Date(u.joinDate || u.join_date).toISOString().split('T')[0] : '',
+      reliabilityScore: u.reliabilityScore || u.reliability_score || 0,
+      memberships: [],
+      kycDocumentFront: u.kycDocumentFront || u.kyc_document_front || u.kyc_document_image || null,
+      kycDocumentBack: u.kycDocumentBack || u.kyc_document_back || null
     };
   }
 
