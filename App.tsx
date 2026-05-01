@@ -34,6 +34,7 @@ const App: React.FC = () => {
   const [dbMembers, setDbMembers] = useState<User[]>([]);
   const [dbTransactions, setDbTransactions] = useState<Transaction[]>([]);
   const [dbGroups, setDbGroups] = useState<Group[]>([]);
+  const [dbMemberships, setDbMemberships] = useState<any[]>([]);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   
@@ -75,6 +76,7 @@ const App: React.FC = () => {
     setDbMembers(db.getMembers());
     setDbTransactions(db.getTransactions());
     setDbGroups(db.getGroups());
+    setDbMemberships(db.getMemberships());
     
     if (currentUser) {
         const updatedUser = db.getMembers().find(u => u.id === currentUser.id) || currentUser;
@@ -108,9 +110,9 @@ const App: React.FC = () => {
 
     const interval = setInterval(() => {
         // Only poll for updates if the user is actually logged in
-        // This prevents 401 errors from unauthorized background requests
+        // Increased interval to 30s to mitigate 429 Too Many Requests errors
         if (currentUser) refreshData();
-    }, 10000);
+    }, 30000);
     return () => clearInterval(interval);
   }, [currentUser, refreshData]);
 
@@ -538,7 +540,7 @@ const App: React.FC = () => {
 
         return (
             <Layout currentUser={contextUser || currentUser} onLogout={handleLogout} currentView={currentView} onNavigate={setCurrentView} isDarkMode={isDarkMode} toggleDarkMode={() => setIsDarkMode(!isDarkMode)}>
-                <SuperuserDashboard members={dbMembers} transactions={dbTransactions} groups={dbGroups} onRefresh={refreshData} currentUser={currentUser} initialTab={initialTab} />
+                <SuperuserDashboard members={dbMembers} transactions={dbTransactions} groups={dbGroups} memberships={dbMemberships} onRefresh={refreshData} currentUser={currentUser} initialTab={initialTab} />
             </Layout>
         );
     }
@@ -563,7 +565,7 @@ const App: React.FC = () => {
         {currentView === 'transactions' && activeGroup && <TransactionHistory transactions={dbTransactions.filter((t: Transaction) => t.groupId === activeGroup.id)} currency={activeGroup.currency} />}
         {currentView === 'members' && activeGroup && contextUser?.role === UserRole.ADMIN && <AdminDashboard group={activeGroup || dummyGroupForNewUser} transactions={dbTransactions} members={dbMembers} currentUser={contextUser} onRefresh={refreshData} initialTab="members" />}
         {currentView === 'settings' && activeGroup && contextUser?.role === UserRole.ADMIN && <AdminDashboard group={activeGroup || dummyGroupForNewUser} transactions={dbTransactions} members={dbMembers} currentUser={contextUser} onRefresh={refreshData} initialTab="settings" />}
-        {currentView === 'admin-mgmt' && contextUser?.role === UserRole.SUPERUSER && <SuperuserDashboard members={dbMembers} transactions={dbTransactions} groups={dbGroups} onRefresh={refreshData} currentUser={currentUser} />}
+        {currentView === 'admin-mgmt' && contextUser?.role === UserRole.SUPERUSER && <SuperuserDashboard members={dbMembers} transactions={dbTransactions} groups={dbGroups} memberships={dbMemberships} onRefresh={refreshData} currentUser={currentUser} />}
         <GeminiAdvisor />
       </Layout>
     );

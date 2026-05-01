@@ -147,6 +147,12 @@ class DatabaseService {
           const remoteUsers = await usersRes.json();
           this.members = Array.isArray(remoteUsers) ? remoteUsers.map((u: any) => this.mapUser(u)) : [];
         }
+
+        // Fix for 429: Centralize membership syncing to avoid redundant calls from dashboards
+        const membershipsRes = await this.apiFetch(`/group-memberships`);
+        if (membershipsRes.ok) {
+          this.memberships = await membershipsRes.json();
+        }
       }
 
       const currentUser = userId ? this.members.find(m => m.id === userId) : null;
@@ -457,13 +463,12 @@ class DatabaseService {
   }
 
   async getGroupMemberships(): Promise<GroupMembership[]> {
-    if (this.isServerOnline) {
-      try {
-        const res = await this.apiFetch(`/group-memberships`);
-        if (res.ok) return await res.json();
-      } catch (e) { console.error(e); }
-    }
-    return [];
+    // Return cached memberships synced in syncData() to avoid 429 errors
+    return [...this.memberships];
+  }
+
+  getMemberships(): GroupMembership[] {
+    return [...this.memberships];
   }
   getSystemConfig(): SystemConfig { return { ...this.systemConfig }; }
   getGroup(): Group | null { return this.groups[0] || null; }

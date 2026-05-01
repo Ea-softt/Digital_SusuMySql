@@ -19,6 +19,7 @@ interface SuperuserDashboardProps {
   members: User[];
   transactions: Transaction[];
   groups: Group[]; 
+  memberships: any[];
   onRefresh: () => void;
   currentUser: User;
   initialTab?: Tab;
@@ -39,7 +40,7 @@ interface SecurityAlert {
     timestamp: number;
 }
 
-export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members, transactions, groups, onRefresh, currentUser, initialTab = 'overview' }) => {
+export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members, transactions, groups, memberships, onRefresh, currentUser, initialTab = 'overview' }) => {
   // State for active tab navigation
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   // State for search functionality
@@ -146,37 +147,19 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   const [isVideoCallOpen, setIsVideoCallOpen] = useState(false);
   const [currentVideoCallGroup, setCurrentVideoCallGroup] = useState<Group | null>(null);
   const [activeMenuGroupId, setActiveMenuGroupId] = useState<string | null>(null);
-  const lastFetchRef = useRef<number>(0);
 
+  // Sync creators mapping from memberships prop instead of direct API calls
   useEffect(() => {
-      const fetchCreatorsAndMemberships = async () => {
-          if (Date.now() - lastFetchRef.current < 5000) return; // Debounce requests
-          lastFetchRef.current = Date.now();
-          try {
-              const token = localStorage.getItem('susu_jwt_token');
-              const res = await fetch('/api/group-memberships', {
-                  headers: { 'Authorization': `Bearer ${token}` }
-              });
-              const data = await res.json();
-              if (Array.isArray(data)) {
-                  setAllMemberships(data);
-                  const creators: Record<string, User> = {};
-                  data.forEach((m: any) => {
-                      if (m.role === 'ADMIN') {
-                          const user = members.find(u => u.id === m.user_id);
-                          if (user) creators[m.group_id] = user;
-                      }
-                  });
-                  setGroupCreators(creators);
-              }
-          } catch (e) {
-              console.error("Failed to fetch group creators", e);
+      const creators: Record<string, User> = {};
+      memberships.forEach((m: any) => {
+          if (m.role === 'ADMIN') {
+              const user = members.find(u => u.id === m.user_id);
+              if (user) creators[m.group_id] = user;
           }
-      };
-      if (groups.length > 0 && members.length > 0) {
-          fetchCreatorsAndMemberships();
-      }
-  }, [groups, members]);
+      });
+      setGroupCreators(creators);
+      setAllMemberships(memberships);
+  }, [memberships, members]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -211,11 +194,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
           }
           
           // Notify the creator (Admin)
-          const token = localStorage.getItem('susu_jwt_token');
-          const res = await fetch('/api/group-memberships', {
-              headers: { 'Authorization': `Bearer ${token}` }
-          });
-          const memberships = await res.json();
+          const memberships = db.getMemberships();
           const adminMembership = Array.isArray(memberships) ? memberships.find((m: any) => m.group_id === group.id && m.role === 'ADMIN') : null;
           
           if (adminMembership) {
@@ -285,12 +264,6 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
       if (confirm(`Are you sure you want to ${action} this member?`)) {
           await db.updateGroupMembershipStatus(viewGroup.id, userId, newStatus);
           // Refresh local membership list
-          const token = localStorage.getItem('susu_jwt_token');
-          const res = await fetch('/api/group-memberships', {
-              headers: { 'Authorization': `Bearer ${token}` }
-          });
-          const data = await res.json();
-          setAllMemberships(data);
           onRefresh();
       }
   };
