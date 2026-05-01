@@ -21,7 +21,7 @@ type AuthMode = 'login' | 'register' | 'forgot' | '2fa';
 const SESSION_KEY = 'susu_auth_session_email';
 const LAST_GROUP_KEY = 'susu_last_active_group_id';
 const REG_DRAFT_KEY = 'susu_registration_draft';
-const TOKEN_KEY = 'token'; // 🛡️ Constant for JWT storage
+const TOKEN_KEY = 'susu_jwt_token'; // 🛡️ Constant for JWT storage
 const API_URL = 'http://localhost:3000/api'; // 🔄 Updated to port 3000 to match your server
 
 const App: React.FC = () => {

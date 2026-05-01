@@ -141,10 +141,12 @@ class DatabaseService {
 
       this.isServerOnline = true;
       
-      const usersRes = await this.apiFetch(`/users`);
-      if (usersRes.ok) {
-        const remoteUsers = await usersRes.json();
-        this.members = Array.isArray(remoteUsers) ? remoteUsers.map((u: any) => this.mapUser(u)) : [];
+      if (this.token) {
+        const usersRes = await this.apiFetch(`/users`);
+        if (usersRes.ok) {
+          const remoteUsers = await usersRes.json();
+          this.members = Array.isArray(remoteUsers) ? remoteUsers.map((u: any) => this.mapUser(u)) : [];
+        }
       }
 
       const currentUser = userId ? this.members.find(m => m.id === userId) : null;
@@ -176,10 +178,12 @@ class DatabaseService {
               }
           }
       } else {
-          const allGroupsRes = await this.apiFetch(`/groups`);
-          if (allGroupsRes.ok) {
-              const remoteGroups = await allGroupsRes.json();
-              this.groups = Array.isArray(remoteGroups) ? remoteGroups.map((g: any) => this.mapGroup(g)) : [];
+          if (this.token) {
+              const allGroupsRes = await this.apiFetch(`/groups`);
+              if (allGroupsRes.ok) {
+                  const remoteGroups = await allGroupsRes.json();
+                  this.groups = Array.isArray(remoteGroups) ? remoteGroups.map((g: any) => this.mapGroup(g)) : [];
+              }
           }
       }
       return true;
