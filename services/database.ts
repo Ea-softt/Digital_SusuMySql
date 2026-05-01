@@ -16,6 +16,7 @@ class DatabaseService {
   private token: string | null = localStorage.getItem('susu_jwt_token');
   private isServerOnline: boolean | null = null;
   private lastHealthCheck: number = 0;
+  private lastDataFetch: number = 0;
   private systemConfig: SystemConfig = {
     defaultCurrency: 'GHS',
     defaultFrequency: 'Monthly',
@@ -141,6 +142,11 @@ class DatabaseService {
 
       this.isServerOnline = true;
       
+      // Fix for 429: Throttle data fetching to once every 15 seconds
+      if (Date.now() - this.lastDataFetch < 15000 && this.members.length > 0) {
+        return true; 
+      }
+
       if (this.token) {
         const usersRes = await this.apiFetch(`/users`);
         if (usersRes.ok) {
@@ -192,6 +198,8 @@ class DatabaseService {
               }
           }
       }
+      
+      this.lastDataFetch = Date.now();
       return true;
     } catch (error) {
       this.isServerOnline = false;

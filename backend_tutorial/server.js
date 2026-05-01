@@ -42,7 +42,7 @@ app.use(helmet({
 // 🛡️ PRODUCTION HARDENING: Rate Limiting (Prevents Brute Force/DoS)
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 200, // Increased for dashboard polling
+    max: 1000, // Higher limit to accommodate administrative polling and dashboard usage
     message: { error: "Too many requests from this IP, please try again after 15 minutes" }
 });
 

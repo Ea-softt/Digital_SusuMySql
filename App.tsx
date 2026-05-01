@@ -114,7 +114,8 @@ const App: React.FC = () => {
         if (currentUser) refreshData();
     }, 30000);
     return () => clearInterval(interval);
-  }, [currentUser, refreshData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser]);
 
   useEffect(() => {
     if (authMode === 'register') {
