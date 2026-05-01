@@ -55,8 +55,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
         db.getGroupContributionTransactions(group.id).then(setGroupContributions);
 
         // Fetch memberships to filter members list
-        const token = localStorage.getItem('token');
-        fetch('http://localhost:3001/api/group-memberships', {
+        const token = localStorage.getItem('susu_jwt_token');
+        fetch('/api/group-memberships', {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -87,7 +87,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
             .catch(err => console.error("Error fetching memberships:", err));
 
         // Fetch current user's specific status in this group
-        fetch(`http://localhost:3001/api/group-membership/status/${userId}/${group.id}`, {
+        fetch(`/api/group-membership/status/${userId}/${group.id}`, {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -413,7 +413,11 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
       if (window.confirm(`Are you sure you want to REJECT ${pendingVerifications.length} pending payout(s)? This indicates you did not receive the funds or there is an error.`)) {
           for (const tx of pendingVerifications) {
               try {
-                  await fetch(`http://localhost:3001/api/transactions/${tx.id}`, { method: 'DELETE' });
+                  const token = localStorage.getItem('token');
+                  await fetch(`/api/transactions/${tx.id}`, { 
+                      method: 'DELETE',
+                      headers: { 'Authorization': `Bearer ${token}` }
+                  });
                   
                   await db.sendGroupMessage(
                       currentUser,

@@ -4,7 +4,7 @@ import { User, GroupMessage, Group } from '../types';
 import { db } from '../services/database';
 import { Send, Users, MoreVertical, Smile, Paperclip } from 'lucide-react';
 
-const API_BASE = 'http://localhost:3001/api';
+const API_BASE = '/api';
 
 interface GroupChatProps {
   currentUser: User;
@@ -26,7 +26,10 @@ export const GroupChat: React.FC<GroupChatProps> = ({ currentUser, activeGroup }
     const loadMembershipStatus = async () => {
       if (selectedGroup) {
         try {
-          const res = await fetch(`${API_BASE}/group-membership/status/${currentUser.id}/${selectedGroup.id}`);
+          const token = localStorage.getItem('susu_jwt_token');
+          const res = await fetch(`${API_BASE}/group-membership/status/${currentUser.id}/${selectedGroup.id}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
           const status = await res.json();
           setMembershipStatus(status);
         } catch (e) {
@@ -75,9 +78,13 @@ export const GroupChat: React.FC<GroupChatProps> = ({ currentUser, activeGroup }
   const handleJoinChat = async () => {
     if (selectedGroup) {
       try {
+        const token = localStorage.getItem('token');
         const res = await fetch(`${API_BASE}/group-membership/join`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
           body: JSON.stringify({ userId: currentUser.id, groupId: selectedGroup.id })
         });
         if (res.ok) {
@@ -95,9 +102,13 @@ export const GroupChat: React.FC<GroupChatProps> = ({ currentUser, activeGroup }
   const handleBlockChat = async () => {
     if (selectedGroup) {
       try {
+        const token = localStorage.getItem('token');
         const res = await fetch(`${API_BASE}/group-membership/block`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
           body: JSON.stringify({ userId: currentUser.id, groupId: selectedGroup.id })
         });
         if (res.ok) {
@@ -115,9 +126,13 @@ export const GroupChat: React.FC<GroupChatProps> = ({ currentUser, activeGroup }
   const handleReactivateChat = async () => {
     if (selectedGroup) {
       try {
+        const token = localStorage.getItem('token');
         const res = await fetch(`${API_BASE}/group-membership/reactivate`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
           body: JSON.stringify({ userId: currentUser.id, groupId: selectedGroup.id })
         });
         if (res.ok) {
@@ -136,9 +151,13 @@ export const GroupChat: React.FC<GroupChatProps> = ({ currentUser, activeGroup }
     if (selectedGroup) {
       if (window.confirm(`Are you sure you want to delete "${selectedGroup.name}"? This action cannot be undone.`)) {
         try {
+          const token = localStorage.getItem('token');
           const res = await fetch(`${API_BASE}/group-membership/delete`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
             body: JSON.stringify({ userId: currentUser.id, groupId: selectedGroup.id })
           });
           if (res.ok) {
@@ -156,7 +175,10 @@ export const GroupChat: React.FC<GroupChatProps> = ({ currentUser, activeGroup }
   const loadMembershipStatus = async () => {
     if (selectedGroup) {
       try {
-        const res = await fetch(`${API_BASE}/group-membership/status/${currentUser.id}/${selectedGroup.id}`);
+        const token = localStorage.getItem('token');
+        const res = await fetch(`${API_BASE}/group-membership/status/${currentUser.id}/${selectedGroup.id}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
         const status = await res.json();
         setMembershipStatus(status);
       } catch (e) {

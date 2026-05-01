@@ -118,8 +118,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
 
     const fetchGroupMembers = async () => {
         try {
-            const token = localStorage.getItem('token');
-            const response = await fetch(`http://localhost:3001/api/group-memberships`, {
+            const token = localStorage.getItem('susu_jwt_token');
+            const response = await fetch(`/api/group-memberships`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
@@ -1002,7 +1002,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                   const verifier = independentVerifiers.length > 0 ? independentVerifiers[Math.floor(Math.random() * independentVerifiers.length)] : null;
                   const txStatus = verifier ? 'PENDING' : 'COMPLETED';
 
-                  const payoutTransactions: Transaction[] = selectedMembersForPayout.map(memberId => {
+                  const payoutTransactions = selectedMembersForPayout.map(memberId => {
                       const member = members.find(m => m.id === memberId);
                       const amount = parseFloat(payoutAmounts[memberId]) || 0;
                       
@@ -1018,7 +1018,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                           status: txStatus,
                           verifierId: verifier?.id
                       };
-                  }).filter((tx): tx is Transaction => tx !== null);
+                  }).filter((tx): tx is Transaction => tx !== null) as Transaction[];
                   
                   if (payoutTransactions.length === 0) {
                       throw new Error("No valid payouts to process.");
@@ -1707,7 +1707,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
             type: 'warning',
             onConfirm: async () => {
                 try {
-                    const res = await fetch(`/api/transactions/${tx.id}/rollback`, { method: 'PUT' });
+                    const token = localStorage.getItem('token');
+                    const res = await fetch(`/api/transactions/${tx.id}/rollback`, { 
+                        method: 'PUT',
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
                     if (res.ok) {
                         await db.sendGroupMessage(currentUser, `⚠️ Contribution for ${tx.userName} has been rolled back.`, group.id);
                         alert("Member contribution has been rolled back.");
@@ -1742,9 +1746,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
             type: 'danger',
             onConfirm: async () => {
                 try {
+                    const token = localStorage.getItem('token');
                     const res = await fetch(`/api/transactions/bulk-rollback`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
                         body: JSON.stringify({ transactionIds: txsToRollback })
                     });
                     

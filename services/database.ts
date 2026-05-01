@@ -15,6 +15,7 @@ class DatabaseService {
   private memberships: GroupMembership[] = [];
   private token: string | null = localStorage.getItem('susu_jwt_token');
   private isServerOnline: boolean | null = null;
+  private lastHealthCheck: number = 0;
   private systemConfig: SystemConfig = {
     defaultCurrency: 'GHS',
     defaultFrequency: 'Monthly',
@@ -122,9 +123,16 @@ class DatabaseService {
 
   async syncData(userId?: string, activeGroupId?: string): Promise<boolean> {
     try {
-      const healthRes = await this.apiFetch(`/check-health`, { 
-          signal: AbortSignal.timeout(3000) 
-      }).catch(() => null);
+      // Only check health every 30 seconds to avoid 429 rate limiting
+      let healthRes = null;
+      if (Date.now() - this.lastHealthCheck > 30000 || this.isServerOnline === null) {
+        healthRes = await this.apiFetch(`/check-health`, { 
+            signal: AbortSignal.timeout(3000) 
+        }).catch(() => null);
+        this.lastHealthCheck = Date.now();
+      } else {
+        healthRes = { ok: this.isServerOnline };
+      }
       
       if (!healthRes || !healthRes.ok) {
           this.isServerOnline = false;
@@ -581,7 +589,7 @@ class DatabaseService {
   async getNotifications(userId: string): Promise<Notification[]> {
     if (this.isServerOnline) {
         try {
-            const res = await fetch(`${API_BASE}/notifications/${userId}`);
+            const res = await this.apiFetch(`/notifications/${userId}`);
             if (res.ok) {
                 const rows = await res.json();
                 return rows.map((r: any) => ({

@@ -146,15 +146,16 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   const [isVideoCallOpen, setIsVideoCallOpen] = useState(false);
   const [currentVideoCallGroup, setCurrentVideoCallGroup] = useState<Group | null>(null);
   const [activeMenuGroupId, setActiveMenuGroupId] = useState<string | null>(null);
+  const lastFetchRef = useRef<number>(0);
 
   useEffect(() => {
       const fetchCreatorsAndMemberships = async () => {
+          if (Date.now() - lastFetchRef.current < 5000) return; // Debounce requests
+          lastFetchRef.current = Date.now();
           try {
-              const token = localStorage.getItem('token');
-              const res = await fetch('http://localhost:3001/api/group-memberships', {
-                  headers: {
-                      'Authorization': `Bearer ${token}`
-                  }
+              const token = localStorage.getItem('susu_jwt_token');
+              const res = await fetch('/api/group-memberships', {
+                  headers: { 'Authorization': `Bearer ${token}` }
               });
               const data = await res.json();
               if (Array.isArray(data)) {
@@ -210,7 +211,10 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
           }
           
           // Notify the creator (Admin)
-          const res = await fetch('http://localhost:3001/api/group-memberships');
+          const token = localStorage.getItem('susu_jwt_token');
+          const res = await fetch('/api/group-memberships', {
+              headers: { 'Authorization': `Bearer ${token}` }
+          });
           const memberships = await res.json();
           const adminMembership = Array.isArray(memberships) ? memberships.find((m: any) => m.group_id === group.id && m.role === 'ADMIN') : null;
           
@@ -280,11 +284,10 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
       const newStatus = action === 'suspend' ? 'SUSPENDED' : 'ACTIVE';
       if (confirm(`Are you sure you want to ${action} this member?`)) {
           await db.updateGroupMembershipStatus(viewGroup.id, userId, newStatus);
-          const token = localStorage.getItem('token');
-          const res = await fetch('http://localhost:3001/api/group-memberships', {
-              headers: {
-                  'Authorization': `Bearer ${token}`
-              }
+          // Refresh local membership list
+          const token = localStorage.getItem('susu_jwt_token');
+          const res = await fetch('/api/group-memberships', {
+              headers: { 'Authorization': `Bearer ${token}` }
           });
           const data = await res.json();
           setAllMemberships(data);
@@ -307,11 +310,9 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   // Fetch user groups when viewing user details
   useEffect(() => {
       if (viewUser) {
-          const token = localStorage.getItem('token');
-          fetch(`http://localhost:3001/api/users/${viewUser.id}/groups`, {
-              headers: {
-                  'Authorization': `Bearer ${token}`
-              }
+          const token = localStorage.getItem('susu_jwt_token');
+          fetch(`/api/users/${viewUser.id}/groups`, {
+              headers: { 'Authorization': `Bearer ${token}` }
           })
             .then(res => res.json())
             .then(data => setViewUserGroups(Array.isArray(data) ? data : []))
