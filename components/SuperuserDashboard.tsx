@@ -147,6 +147,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   const [isVideoCallOpen, setIsVideoCallOpen] = useState(false);
   const [currentVideoCallGroup, setCurrentVideoCallGroup] = useState<Group | null>(null);
   const [activeMenuGroupId, setActiveMenuGroupId] = useState<string | null>(null);
+  const [zoomedImage, setZoomedImage] = useState<string | null>(null);
 
   // Sync creators mapping from memberships prop instead of direct API calls
   useEffect(() => {
@@ -2150,6 +2151,29 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
       );
   };
 
+  const renderZoomModal = () => {
+      if (!zoomedImage) return null;
+      return (
+          <div 
+              className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in cursor-zoom-out"
+              onClick={() => setZoomedImage(null)}
+          >
+              <button 
+                  className="absolute top-6 right-6 text-white hover:text-gray-300 transition-colors p-2 bg-black/50 rounded-full"
+                  onClick={() => setZoomedImage(null)}
+              >
+                  <X className="w-8 h-8" />
+              </button>
+              <img 
+                  src={zoomedImage} 
+                  alt="Zoomed preview" 
+                  className="max-w-[95vw] max-h-[95vh] object-contain rounded-lg shadow-2xl" 
+                  onClick={(e) => e.stopPropagation()}
+              />
+          </div>
+      );
+  };
+
   const renderWithdrawConfirmModal = () => {
       if (!showWithdrawConfirm) return null;
       return (
@@ -2596,7 +2620,10 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                      {/* Live Photo */}
                                      <div className="space-y-2">
                                          <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase text-center">Live Capture</p>
-                                         <div className="h-40 w-40 mx-auto bg-gray-100 dark:bg-gray-900 rounded-full border border-gray-200 dark:border-gray-600 overflow-hidden relative shadow-sm">
+                                         <div 
+                                             className="h-40 w-40 mx-auto bg-gray-100 dark:bg-gray-900 rounded-full border border-gray-200 dark:border-gray-600 overflow-hidden relative shadow-sm cursor-zoom-in hover:border-primary-500 transition-colors"
+                                             onClick={() => setZoomedImage(selectedUserForKYC.avatar)}
+                                         >
                                              <img src={selectedUserForKYC.avatar} alt="Live Capture" className="w-full h-full object-cover" />
                                          </div>
                                      </div>
@@ -2605,7 +2632,10 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                          {/* ID Front */}
                                          <div className="space-y-2">
                                              <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase text-center">Card Front</p>
-                                             <div className="aspect-[3/2] bg-gray-100 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden relative group cursor-zoom-in shadow-sm">
+                                             <div 
+                                                 className="aspect-[3/2] bg-gray-100 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden relative group cursor-zoom-in shadow-sm hover:border-primary-500 transition-colors"
+                                                 onClick={() => { const src = selectedUserForKYC.kycDocumentFront || (selectedUserForKYC as any).kyc_document_front || selectedUserForKYC.idDocumentUrl || selectedUserForKYC.kycDocumentImage; if (src) setZoomedImage(src); }}
+                                             >
                                                 {/* Check both camelCase and snake_case naming for maximum reliability */}
                                                 {(selectedUserForKYC.kycDocumentFront || (selectedUserForKYC as any).kyc_document_front || selectedUserForKYC.idDocumentUrl || selectedUserForKYC.kycDocumentImage) ? (
                                                     <img src={selectedUserForKYC.kycDocumentFront || (selectedUserForKYC as any).kyc_document_front || selectedUserForKYC.idDocumentUrl || selectedUserForKYC.kycDocumentImage} alt="ID Front" className="w-full h-full object-cover" />
@@ -2625,7 +2655,10 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                          {/* ID Back */}
                                          <div className="space-y-2">
                                              <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase text-center">Card Back</p>
-                                             <div className="aspect-[3/2] bg-gray-100 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden relative group cursor-zoom-in shadow-sm">
+                                             <div 
+                                                 className="aspect-[3/2] bg-gray-100 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden relative group cursor-zoom-in shadow-sm hover:border-primary-500 transition-colors"
+                                                 onClick={() => { const src = selectedUserForKYC.kycDocumentBack || (selectedUserForKYC as any).kyc_document_back || (selectedUserForKYC as any).kycDocumentBack; if (src) setZoomedImage(src); }}
+                                             >
                                                  {(selectedUserForKYC.kycDocumentBack || (selectedUserForKYC as any).kyc_document_back || (selectedUserForKYC as any).kycDocumentBack) ? (
                                                      <img src={selectedUserForKYC.kycDocumentBack || (selectedUserForKYC as any).kyc_document_back || (selectedUserForKYC as any).kycDocumentBack} alt="ID Back" className="w-full h-full object-cover" />
                                                  ) : (
@@ -3440,6 +3473,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
       {renderKYCModal()}
       {renderAutoVerifyConfirmModal()}
       {renderWithdrawConfirmModal()}
+      {renderZoomModal()}
       {renderReactivateModal()}
       {renderGroupActionConfirmModal()}
       {renderVideoCallModal()}
