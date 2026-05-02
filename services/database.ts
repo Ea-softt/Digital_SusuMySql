@@ -70,6 +70,22 @@ class DatabaseService {
     };
   }
 
+  private mapGroupMembership(gm: any): GroupMembership {
+    if (!gm) return {} as GroupMembership;
+    return {
+      groupId: gm.group_id || gm.groupId || '',
+      groupName: gm.group_name || gm.groupName || '',
+      userId: gm.user_id || '', // Map user_id to userId
+      role: gm.role || 'MEMBER',
+      status: gm.status || 'PENDING',
+      joinDate: (gm.joined_at || gm.joinDate) ? new Date(gm.joined_at || gm.joinDate).toISOString().split('T')[0] : '',
+      isBlocked: gm.is_blocked || false,
+      isDeleted: gm.is_deleted || false,
+      verifierId: gm.verifier_id || undefined,
+      pendingStatus: gm.pending_status || undefined,
+    };
+  }
+
   private mapGroup(g: any): Group {
     if (!g) return {} as Group;
     
@@ -159,7 +175,7 @@ class DatabaseService {
         // Fix for 429: Centralize membership syncing to avoid redundant calls from dashboards
         const membershipsRes = await this.apiFetch(`/group-memberships`);
         if (membershipsRes.ok) {
-          this.memberships = await membershipsRes.json();
+          this.memberships = (await membershipsRes.json()).map((m: any) => this.mapGroupMembership(m));
         }
       }
 

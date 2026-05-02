@@ -72,8 +72,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                 if (Array.isArray(data)) {
                     data.forEach(m => {
                         if (m.group_id === group.id) {
-                            if (m.status === 'ACTIVE') ids.add(m.user_id);
-                            if (m.role === 'ADMIN') admins.push(m.user_id);
+                            if (m.status === 'ACTIVE') ids.add(m.userId);
+                            if (m.role === 'ADMIN') admins.push(m.userId);
                         }
                         if (m.group_id === group.id && m.verifier_id === userId) {
                             myVerifications.push(m);

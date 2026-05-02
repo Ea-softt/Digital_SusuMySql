@@ -43,8 +43,12 @@ export interface GroupMembership {
   groupName: string;
   role: UserRole;
   status: 'ACTIVE' | 'PENDING' | 'SUSPENDED' | 'INVITED' | 'NEW' | 'LEFT';
-  joinDate: string;
+  joinDate: string; // Correct property name
   reliabilityScore?: number;
+  isBlocked?: boolean;
+  isDeleted?: boolean;
+  verifierId?: string;
+  pendingStatus?: 'ACTIVE' | 'PENDING' | 'SUSPENDED' | 'INVITED';
 }
 
 // The Main User Object

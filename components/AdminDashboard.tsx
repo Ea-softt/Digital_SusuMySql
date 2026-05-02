@@ -129,8 +129,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                 if (Array.isArray(allMemberships)) {
                     const memberships: Record<string, string> = {};
                     allMemberships.forEach((m: any) => {
-                        if (m.group_id === group.id) {
-                            memberships[m.user_id] = m.status;
+                        if (m.groupId === group.id) {
+                            memberships[m.userId] = m.status;
                         }
                     });
                     setGroupMemberships(memberships);
@@ -1002,7 +1002,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                   const verifier = independentVerifiers.length > 0 ? independentVerifiers[Math.floor(Math.random() * independentVerifiers.length)] : null;
                   const txStatus = verifier ? 'PENDING' : 'COMPLETED';
 
-                  const payoutTransactions = selectedMembersForPayout.map(memberId => {
+                  const payoutTransactions = selectedMembersForPayout.map((memberId): Transaction | null => {
                       const member = members.find(m => m.id === memberId);
                       const amount = parseFloat(payoutAmounts[memberId]) || 0;
                       

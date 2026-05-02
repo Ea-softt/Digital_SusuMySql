@@ -196,10 +196,10 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
           
           // Notify the creator (Admin)
           const memberships = db.getMemberships();
-          const adminMembership = Array.isArray(memberships) ? memberships.find((m: any) => m.group_id === group.id && m.role === 'ADMIN') : null;
+          const adminMembership = Array.isArray(memberships) ? memberships.find((m: any) => (m.groupId === group.id || m.group_id === group.id) && m.role === 'ADMIN') : null;
           
           if (adminMembership) {
-               const creator = members.find(m => m.id === adminMembership.user_id);
+               const creator = members.find(m => m.id === adminMembership.userId);
                if (creator) {
                await db.createNotification({
                   id: `notif-group-${Date.now()}`,
@@ -2565,11 +2565,11 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                              {/* Location & Device Card */}
                              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-600 p-4 shadow-sm">
                                  <h5 className="font-bold text-gray-900 dark:text-white text-sm uppercase tracking-wider mb-4 border-b border-gray-100 dark:border-gray-700 pb-2">Location & Device Intelligence</h5>
-                                 
+
                                  <div className="mb-4">
                                      <div className="flex items-center gap-2 mb-2 text-sm text-gray-700 dark:text-gray-300">
                                          <MapPin className="w-4 h-4 text-red-500" />
-                                         <span className="font-medium">{displayDeviceInfo.location}</span>
+                                         <span className="font-medium">{selectedUserForKYC.location}</span>
                                      </div>
                                      {/* Mock Map View */}
                                      <div className="w-full h-32 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-100 dark:border-blue-900/30 flex items-center justify-center relative overflow-hidden group">
