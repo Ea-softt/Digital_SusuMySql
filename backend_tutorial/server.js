@@ -618,7 +618,9 @@ app.post('/api/users/:id/kyc-analyze', authorizeRoles('SUPERUSER'), async (req, 
         if (textExtraction === 'Successful') overallScore += 20;
 
         // 3. ID Number Match (Provider vs OCR)
-        const idNumberMatch = (user.kycId && extractedIdFromCard === user.kycId) ? 'Matched' : 'Mismatch';
+        const idFormatRegex = /^GHA-\d{9}-\d$/;
+        const isIdValid = idFormatRegex.test(user.kycId || '');
+        const idNumberMatch = (user.kycId && extractedIdFromCard === user.kycId && isIdValid) ? 'Matched' : 'Mismatch';
         if (idNumberMatch === 'Matched') overallScore += 15;
 
         // 4. Location Match (Registration GPS vs ID Address)
