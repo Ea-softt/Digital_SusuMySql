@@ -1,7 +1,7 @@
 
 // ... imports ...
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { User, Transaction, Group, UserRole, AuditLog } from '../types';
+import { User, Transaction, Group, UserRole, AuditLog, KycAnalysisResult } from '../types';
 import { StatsCard } from './StatsCard';
 import { Users as UsersIcon, Shield, Activity, DollarSign, Search, AlertTriangle, CheckCircle, XCircle, Lock, Unlock, Trash2, Server, Database, Settings, ScanFace, BrainCircuit, X, TrendingUp, Download, Upload, AlertOctagon, Globe, PlusCircle, Calendar, Camera, MessageSquare, UserCog, ShieldAlert, ChevronRight, Wallet, ArrowUpRight, FileText, UserPlus, Mail, Loader2, Eye, MapPin, Smartphone, Cpu, Wifi, Phone, History, FileDown, Radar, ArrowLeft, Megaphone, Send, Clock, ShieldCheck, Info, Video, MoreVertical } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
@@ -148,6 +148,8 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   const [currentVideoCallGroup, setCurrentVideoCallGroup] = useState<Group | null>(null);
   const [activeMenuGroupId, setActiveMenuGroupId] = useState<string | null>(null);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+  const [kycAnalysis, setKycAnalysis] = useState<KycAnalysisResult | null>(null);
+  const [isAnalyzingKYC, setIsAnalyzingKYC] = useState(false);
 
   // Sync creators mapping from memberships prop instead of direct API calls
   useEffect(() => {
@@ -161,6 +163,29 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
       setGroupCreators(creators);
       setAllMemberships(memberships);
   }, [memberships, members]);
+
+  // Perform KYC analysis when selectedUserForKYC changes
+  useEffect(() => {
+      const runKycAnalysis = async () => {
+          if (selectedUserForKYC) {
+              setKycAnalysis(null); // Clear previous analysis
+              setIsAnalyzingKYC(true);
+              try {
+                  const result = await db.analyzeUserKYC(selectedUserForKYC.id);
+                  setKycAnalysis(result);
+              } catch (error) {
+                  console.error("Failed to perform KYC analysis:", error);
+                  // Fallback to a default error state
+                  setKycAnalysis({ faceMatch: 'N/A', textExtraction: 'N/A', fraudCheck: 'N/A', idNumberMatch: 'N/A', locationMatch: 'N/A', documentConsistency: 'N/A', overallScore: 0, message: "Failed to perform AI analysis. Please try again." });
+              } finally {
+                  setIsAnalyzingKYC(false);
+              }
+          } else {
+              setKycAnalysis(null);
+          }
+      };
+      runKycAnalysis();
+  }, [selectedUserForKYC]); // Only re-run when selectedUserForKYC changes
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1058,6 +1083,45 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
     );
   };
 
+// Helper Components for a High Standard UI
+
+const KycImageContainer: React.FC<{ src: any, label: string, onZoom: (s: string) => void }> = ({ src, label, onZoom }) => (
+    <div 
+        className="aspect-[3/2] bg-gray-100 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden relative group cursor-zoom-in shadow-sm hover:border-primary-500 transition-all"
+        onClick={() => src && onZoom(src)}
+    >
+        {src ? (
+            <>
+                <img src={src} alt={label} className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="text-white text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 bg-black/40 px-2 py-1 rounded-full backdrop-blur-md">
+                        <Eye className="w-3 h-3" /> Zoom to Inspect
+                    </div>
+                </div>
+            </>
+        ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 bg-gray-50 dark:bg-gray-800">
+                <FileText className="w-6 h-6 mb-1" />
+                <span className="text-[10px]">Missing {label}</span>
+            </div>
+        )}
+    </div>
+);
+
+const AnalysisRow: React.FC<{ label: string, status?: string }> = ({ label, status }) => {
+    const isPositive = status === 'Confirmed' || status === 'Successful' || status === 'Matched' || status === 'Consistent' || status === 'Passed';
+    const isWarning = status === 'Uncertain' || status === 'Partial';
+    
+    return (
+        <div className="flex items-center justify-between text-sm text-gray-700 dark:text-gray-300 py-0.5">
+            <div className="flex items-center gap-2">
+                {isPositive ? <CheckCircle className="w-4 h-4 text-green-500" /> : isWarning ? <AlertTriangle className="w-4 h-4 text-yellow-500" /> : <ShieldAlert className="w-4 h-4 text-red-500" />}
+                <span>{label}:</span>
+            </div>
+            <span className={`font-bold ${isPositive ? 'text-green-600' : isWarning ? 'text-yellow-600' : 'text-red-600'}`}>{status || 'N/A'}</span>
+        </div>
+    );
+};
   const renderUserManagement = () => {
     const filteredMembers = members.filter(m => 
       m.role !== UserRole.SUPERUSER &&
@@ -2500,6 +2564,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
 
   const renderKYCModal = () => {
     if (!selectedUserForKYC) return null;
+    const analysis = kycAnalysis;
     const matchScore = calculateMatchScore(selectedUserForKYC);
 
     // Use real device info if available, otherwise use placeholder
@@ -2621,10 +2686,13 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                      <div className="space-y-2">
                                          <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase text-center">Live Capture</p>
                                          <div 
-                                             className="h-40 w-40 mx-auto bg-gray-100 dark:bg-gray-900 rounded-full border border-gray-200 dark:border-gray-600 overflow-hidden relative shadow-sm cursor-zoom-in hover:border-primary-500 transition-colors"
+                                             className="h-40 w-40 mx-auto bg-gray-100 dark:bg-gray-900 rounded-full border border-gray-200 dark:border-gray-600 overflow-hidden relative shadow-sm cursor-zoom-in hover:border-primary-500 transition-all group"
                                              onClick={() => setZoomedImage(selectedUserForKYC.avatar)}
                                          >
                                              <img src={selectedUserForKYC.avatar} alt="Live Capture" className="w-full h-full object-cover" />
+                                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                 <Search className="w-6 h-6 text-white" />
+                                             </div>
                                          </div>
                                      </div>
 
@@ -2632,47 +2700,20 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                          {/* ID Front */}
                                          <div className="space-y-2">
                                              <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase text-center">Card Front</p>
-                                             <div 
-                                                 className="aspect-[3/2] bg-gray-100 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden relative group cursor-zoom-in shadow-sm hover:border-primary-500 transition-colors"
-                                                 onClick={() => { const src = selectedUserForKYC.kycDocumentFront || (selectedUserForKYC as any).kyc_document_front || selectedUserForKYC.idDocumentUrl || selectedUserForKYC.kycDocumentImage; if (src) setZoomedImage(src); }}
-                                             >
-                                                {/* Check both camelCase and snake_case naming for maximum reliability */}
-                                                {(selectedUserForKYC.kycDocumentFront || (selectedUserForKYC as any).kyc_document_front || selectedUserForKYC.idDocumentUrl || selectedUserForKYC.kycDocumentImage) ? (
-                                                    <img src={selectedUserForKYC.kycDocumentFront || (selectedUserForKYC as any).kyc_document_front || selectedUserForKYC.idDocumentUrl || selectedUserForKYC.kycDocumentImage} alt="ID Front" className="w-full h-full object-cover" />
-                                                 ) : (
-                                                     <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 bg-gray-50 dark:bg-gray-800">
-                                                         <FileText className="w-6 h-6 mb-1" />
-                                                         <span className="text-[10px]">Missing Front</span>
-                                                     </div>
-                                                 )}
-                                                 {selectedUserForKYC.kycDocumentFront && (
-                                                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                         <Eye className="w-6 h-6 text-white" />
-                                                     </div>
-                                                 )}
-                                             </div>
+                                             <KycImageContainer 
+                                                 src={selectedUserForKYC.kycDocumentFront || (selectedUserForKYC as any).kyc_document_front || selectedUserForKYC.idDocumentUrl || selectedUserForKYC.kycDocumentImage} 
+                                                 label="Front" 
+                                                 onZoom={setZoomedImage} 
+                                             />
                                          </div>
                                          {/* ID Back */}
                                          <div className="space-y-2">
                                              <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase text-center">Card Back</p>
-                                             <div 
-                                                 className="aspect-[3/2] bg-gray-100 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden relative group cursor-zoom-in shadow-sm hover:border-primary-500 transition-colors"
-                                                 onClick={() => { const src = selectedUserForKYC.kycDocumentBack || (selectedUserForKYC as any).kyc_document_back || (selectedUserForKYC as any).kycDocumentBack; if (src) setZoomedImage(src); }}
-                                             >
-                                                 {(selectedUserForKYC.kycDocumentBack || (selectedUserForKYC as any).kyc_document_back || (selectedUserForKYC as any).kycDocumentBack) ? (
-                                                     <img src={selectedUserForKYC.kycDocumentBack || (selectedUserForKYC as any).kyc_document_back || (selectedUserForKYC as any).kycDocumentBack} alt="ID Back" className="w-full h-full object-cover" />
-                                                 ) : (
-                                                     <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 bg-gray-50 dark:bg-gray-800">
-                                                         <FileText className="w-6 h-6 mb-1" />
-                                                         <span className="text-[10px]">Missing Back</span>
-                                                     </div>
-                                                 )}
-                                                 {selectedUserForKYC.kycDocumentBack && (
-                                                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                         <Eye className="w-6 h-6 text-white" />
-                                                     </div>
-                                                 )}
-                                             </div>
+                                             <KycImageContainer 
+                                                 src={selectedUserForKYC.kycDocumentBack || (selectedUserForKYC as any).kyc_document_back || (selectedUserForKYC as any).kycDocumentBack} 
+                                                 label="Back" 
+                                                 onZoom={setZoomedImage} 
+                                             />
                                          </div>
                                      </div>
                                  </div>
@@ -2698,18 +2739,12 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
                                  </div>
 
                                  <div className="space-y-2">
-                                     <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                                         {matchScore >= 80 ? <CheckCircle className="w-4 h-4 text-green-500" /> : <AlertTriangle className="w-4 h-4 text-yellow-500" />}
-                                         <span>Face Match: <span className="font-bold">{matchScore >= 80 ? 'Confirmed' : 'Uncertain'}</span></span>
-                                     </div>
-                                     <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                                         <CheckCircle className="w-4 h-4 text-green-500" />
-                                         <span>Text Extraction: <span className="font-bold">Successful</span></span>
-                                     </div>
-                                      <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                                         {matchScore >= 70 ? <CheckCircle className="w-4 h-4 text-green-500" /> : <ShieldAlert className="w-4 h-4 text-red-500" />}
-                                         <span>Fraud Check: <span className="font-bold">{matchScore >= 70 ? 'Passed' : 'Flagged'}</span></span>
-                                     </div>
+                                     <AnalysisRow label="Face Match" status={analysis?.faceMatch} />
+                                     <AnalysisRow label="Text Extraction" status={analysis?.textExtraction} />
+                                     <AnalysisRow label="ID Number Match" status={analysis?.idNumberMatch} />
+                                     <AnalysisRow label="Location Match" status={analysis?.locationMatch} />
+                                     <AnalysisRow label="Doc Consistency" status={analysis?.documentConsistency} />
+                                     <AnalysisRow label="Fraud Check" status={analysis?.fraudCheck} />
                                  </div>
 
                                  <div className="mt-4 p-3 bg-white/50 dark:bg-black/20 rounded-lg text-xs italic text-purple-800 dark:text-purple-300 border border-purple-100 dark:border-purple-900/30">

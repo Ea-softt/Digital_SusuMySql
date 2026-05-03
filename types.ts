@@ -51,6 +51,18 @@ export interface GroupMembership {
   pendingStatus?: 'ACTIVE' | 'PENDING' | 'SUSPENDED' | 'INVITED';
 }
 
+// Interface for detailed KYC analysis results
+export interface KycAnalysisResult {
+  faceMatch: 'Confirmed' | 'Uncertain' | 'Failed' | 'N/A';
+  textExtraction: 'Successful' | 'Failed' | 'Partial' | 'N/A';
+  fraudCheck: 'Passed' | 'Flagged' | 'N/A';
+  idNumberMatch: 'Matched' | 'Mismatch' | 'N/A';
+  locationMatch: 'Matched' | 'Mismatch' | 'N/A';
+  documentConsistency: 'Consistent' | 'Inconsistent' | 'N/A';
+  overallScore: number;
+  message: string;
+}
+
 // The Main User Object
 // If you add a field here, you must update the registration form in App.tsx
 export interface User {

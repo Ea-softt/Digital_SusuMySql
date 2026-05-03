@@ -1,5 +1,5 @@
 
-import { Group, Transaction, User, GroupMessage, UserRole, AuditLog, SystemConfig, GroupMembership, Notification } from '../types'; 
+import { Group, Transaction, User, GroupMessage, UserRole, AuditLog, SystemConfig, GroupMembership, Notification, KycAnalysisResult } from '../types'; 
 
 const API_BASE = '/api';
 
@@ -486,6 +486,19 @@ class DatabaseService {
           return res.ok;
       }
       return false;
+  }
+
+  async analyzeUserKYC(userId: string): Promise<KycAnalysisResult | null> {
+    if (!this.isServerOnline) throw new Error("Server offline");
+    try {
+      const res = await this.apiFetch(`/users/${userId}/kyc-analyze`, { method: 'POST' });
+      if (res.ok) return await res.json();
+      const errorData = await res.json();
+      throw new Error(errorData.error || "KYC Analysis failed on server.");
+    } catch (e) {
+      console.error("KYC Analysis failed", e);
+      throw e; // Re-throw to be caught by the UI
+    }
   }
 
   async getGroupMemberships(): Promise<GroupMembership[]> {
