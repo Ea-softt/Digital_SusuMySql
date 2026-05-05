@@ -2565,7 +2565,9 @@ const AnalysisRow: React.FC<{ label: string, status?: string }> = ({ label, stat
   const renderKYCModal = () => {
     if (!selectedUserForKYC) return null;
     const analysis = kycAnalysis;
-    const matchScore = calculateMatchScore(selectedUserForKYC);
+    // Prioritize backend analysis score, fallback to mock if still loading
+    const displayScore = analysis ? analysis.overallScore : calculateMatchScore(selectedUserForKYC);
+    const displayMessage = analysis ? analysis.message : (displayScore >= 80 ? 'Identity verified with high confidence.' : 'Manual review recommended.');
 
     // Use real device info if available, otherwise use placeholder
     const displayDeviceInfo = deviceInfo || {
@@ -2726,29 +2728,42 @@ const AnalysisRow: React.FC<{ label: string, status?: string }> = ({ label, stat
                                      <h5 className="font-bold text-purple-900 dark:text-purple-200 text-sm uppercase tracking-wider flex items-center gap-2">
                                          <BrainCircuit className="w-5 h-5" /> AI Analysis
                                      </h5>
-                                     <span className={`text-2xl font-black ${matchScore >= 80 ? 'text-green-600' : matchScore >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                         {matchScore}%
+                                     <span className={`text-2xl font-black ${displayScore >= 80 ? 'text-green-600' : displayScore >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                         {displayScore}%
                                      </span>
                                  </div>
                                  
                                  <div className="w-full h-3 bg-white dark:bg-gray-700 rounded-full overflow-hidden mb-4 border border-purple-100 dark:border-purple-900">
                                      <div 
-                                         className={`h-full transition-all duration-1000 ${matchScore >= 80 ? 'bg-green-500' : matchScore >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`} 
-                                         style={{ width: `${matchScore}%` }}
+                                         className={`h-full transition-all duration-1000 ${displayScore >= 80 ? 'bg-green-500' : displayScore >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`} 
+                                         style={{ width: `${displayScore}%` }}
                                      ></div>
                                  </div>
 
                                  <div className="space-y-2">
-                                     <AnalysisRow label="Face Match" status={analysis?.faceMatch} />
-                                     <AnalysisRow label="Text Extraction" status={analysis?.textExtraction} />
-                                     <AnalysisRow label="ID Number Match" status={analysis?.idNumberMatch} />
-                                     <AnalysisRow label="Location Match" status={analysis?.locationMatch} />
-                                     <AnalysisRow label="Doc Consistency" status={analysis?.documentConsistency} />
-                                     <AnalysisRow label="Fraud Check" status={analysis?.fraudCheck} />
+                                     {isAnalyzingKYC ? (
+                                         <div className="space-y-2 py-2">
+                                             {[1, 2, 3, 4, 5, 6].map(i => (
+                                                 <div key={i} className="flex justify-between items-center animate-pulse opacity-50">
+                                                     <div className="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                                                     <div className="h-3 w-12 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                                                 </div>
+                                             ))}
+                                         </div>
+                                     ) : (
+                                         <>
+                                             <AnalysisRow label="Face Match" status={analysis?.faceMatch} />
+                                             <AnalysisRow label="Text Extraction" status={analysis?.textExtraction} />
+                                             <AnalysisRow label="ID Number Match" status={analysis?.idNumberMatch} />
+                                             <AnalysisRow label="Location Match" status={analysis?.locationMatch} />
+                                             <AnalysisRow label="Doc Consistency" status={analysis?.documentConsistency} />
+                                             <AnalysisRow label="Fraud Check" status={analysis?.fraudCheck} />
+                                         </>
+                                     )}
                                  </div>
 
                                  <div className="mt-4 p-3 bg-white/50 dark:bg-black/20 rounded-lg text-xs italic text-purple-800 dark:text-purple-300 border border-purple-100 dark:border-purple-900/30">
-                                     "{matchScore >= 80 ? 'Identity verified with high confidence. Document authentic.' : 'Discrepancy detected in facial features. Manual review recommended.'}"
+                                     "{displayMessage}"
                                  </div>
                              </div>
                          </div>

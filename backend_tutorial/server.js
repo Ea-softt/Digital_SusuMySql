@@ -618,19 +618,35 @@ app.post('/api/users/:id/kyc-analyze', authorizeRoles('SUPERUSER'), async (req, 
         if (textExtraction === 'Successful') overallScore += 20;
 
         // 3. ID Number Match (Provider vs OCR)
-        const idFormatRegex = /^GHA-\d{9}-\d$/;
-        const isIdValid = idFormatRegex.test(user.kycId || '');
-        const idNumberMatch = (user.kycId && extractedIdFromCard === user.kycId && isIdValid) ? 'Matched' : 'Mismatch';
+        const idRegex = /^GHA-\d{9}-\d$/; // Enforce strict Ghana Card format
+        const isFormatCorrect = idRegex.test(user.kycId || '');
+        const idNumberMatch = (user.kycId && extractedIdFromCard === user.kycId && isFormatCorrect) ? 'Matched' : 'Mismatch';
         if (idNumberMatch === 'Matched') overallScore += 15;
 
         // 4. Location Match (Registration GPS vs ID Address)
-        const locationMatch = (user.location && extractedLocationFromCard === user.location) ? 'Matched' : 'Mismatch';
+        const isLocInGhana = (loc) => {
+            if (!loc) return false;
+            const l = loc.toUpperCase();
+            // Check for keyword "Ghana" or "GH"
+            if (l.includes('GHANA') || l.includes('GH')) return true;
+            // Check GPS coordinates (Bounding box for Ghana)
+            const coords = loc.split(',').map(p => parseFloat(p.trim()));
+            return (coords.length === 2 && coords[0] >= 4.5 && coords[0] <= 11.5 && coords[1] >= -3.5 && coords[1] <= 1.5);
+        };
+        const locationMatch = (user.location && extractedLocationFromCard === user.location && isLocInGhana(user.location)) ? 'Matched' : 'Mismatch';
         if (locationMatch === 'Matched') overallScore += 15;
 
         // 5. Document Consistency (Front vs. Back)
-        // Simulate a check that validates the name and ID appear identical on both sides
-        const documentConsistency = (hasFrontImage && hasBackImage && extractedNameFromCard === user.name) ? 'Consistent' : 'Inconsistent';
-        if (documentConsistency === 'Consistent') overallScore += 10;
+        // 🛡️ SECURITY: Flag if the same image was uploaded for both front and back
+        const isDuplicateImage = hasFrontImage && hasBackImage && user.kycDocumentFront === user.kycDocumentBack;
+        const documentConsistency = isDuplicateImage ? 'Failed (Duplicate Photo)' : 
+                                   (hasFrontImage && hasBackImage && extractedNameFromCard === user.name) ? 'Consistent' : 'Inconsistent';
+        
+        if (documentConsistency === 'Consistent') {
+            overallScore += 10;
+        } else if (isDuplicateImage) {
+            overallScore -= 50; // Critical penalty for fraud attempt
+        }
 
         // 6. Fraud Check (Reliability + Metadata)
         const fraudCheck = (user.reliabilityScore >= 80 && idNumberMatch === 'Matched') ? 'Passed' : 'Flagged';
