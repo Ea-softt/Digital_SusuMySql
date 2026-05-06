@@ -99,22 +99,21 @@ const App: React.FC = () => {
       // If we already have a user in state (e.g., just logged in), skip restoration
       if (currentUser) return;
 
-      const savedEmail = localStorage.getItem(SESSION_KEY);
-      const savedToken = localStorage.getItem(TOKEN_KEY);
+        const savedEmail = localStorage.getItem(SESSION_KEY);
+        const savedToken = localStorage.getItem(TOKEN_KEY);
 
-      // 🛡️ Only attempt to restore session if both email AND token exist
-      if (savedEmail && savedToken && db.getServerStatus() !== false) {
-        // Re-sync basic data from the server to get the members list
-        await db.syncData();
-        const allUsers = db.getMembers();
-        const sessionUser = allUsers.find(u => u.email === savedEmail);
-        
-        if (sessionUser) {
-          // This populates the currentUser state and sets up group/view context
-          handleLogin(sessionUser, true); 
+        if (savedEmail && savedToken && db.getServerStatus() !== false) {
+            // Use targeted sync instead of full platform sync to speed up boot time
+            await db.syncData(); 
+            const allUsers = db.getMembers();
+            const sessionUser = allUsers.find(u => u.email === savedEmail);
+            
+            if (sessionUser) {
+                // Await handleLogin to ensure data is ready before UI appears
+                await handleLogin(sessionUser, true, savedToken); 
+            }
         }
-      }
-      setIsRestoringSession(false);
+        setIsRestoringSession(false);
     };
 
     restoreSession();
@@ -301,28 +300,35 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLogin = (user: User, isRestoring = false, token?: string) => {
-    setCurrentUser(user);
-    if (!isRestoring && token) {
-        // 🛡️ SECURITY: Persist the JWT for all future API calls
-        localStorage.setItem(TOKEN_KEY, token);
-        localStorage.setItem(SESSION_KEY, user.email);
-    }
-    
-    const groups = db.getGroupsForUser(user.id);
-    setUserGroups(groups);
-    if (groups.length > 0) {
-        const lastGroupId = localStorage.getItem(LAST_GROUP_KEY);
-        const lastGroup = lastGroupId ? groups.find(g => g.id === lastGroupId) : null;
-        setActiveGroup(lastGroup || groups[0]); // Restore or fallback
-        setCurrentView('dashboard');
-    } else {
-        setActiveGroup(null);
-        // For members, the dashboard itself handles the 'join group' view which includes wallet access.
-        // For admins, they need the dedicated create group view.
-        setCurrentView(user.role === UserRole.ADMIN ? 'join-group' : 'dashboard');
-    }
-    if (user.role === UserRole.SUPERUSER) setCurrentView('admin-mgmt');
+  const handleLogin = async (user: User, isRestoring = false, token?: string) => {
+      setCurrentUser(user);
+      if (!isRestoring && token) {
+          localStorage.setItem(TOKEN_KEY, token);
+          localStorage.setItem(SESSION_KEY, user.email);
+      }
+
+      // 🚀 PERFORMANCE: Force an immediate targeted data sync for this user
+      // This ensures the dashboard doesn't start empty
+      await db.syncData(user.id);
+      
+      const groups = db.getGroupsForUser(user.id);
+      setUserGroups(groups);
+      
+      if (groups.length > 0) {
+          const lastGroupId = localStorage.getItem(LAST_GROUP_KEY);
+          const lastGroup = lastGroupId ? groups.find(g => g.id === lastGroupId) : null;
+          setActiveGroup(lastGroup || groups[0]);
+          setCurrentView('dashboard');
+      } else {
+          setActiveGroup(null);
+          setCurrentView(user.role === UserRole.ADMIN ? 'join-group' : 'dashboard');
+      }
+      if (user.role === UserRole.SUPERUSER) setCurrentView('admin-mgmt');
+      
+      // Populate state with the synced data
+      setDbMembers(db.getMembers());
+      setDbTransactions(db.getTransactions());
+      setDbGroups(db.getGroups());
   };
 
   const handleLogout = () => {
@@ -406,7 +412,7 @@ const App: React.FC = () => {
       try {
           const result = await db.login(email, password);
           if (result?.user) {
-              handleLogin(result.user, false, result.token);
+              await handleLogin(result.user, false, result.token);
           } else {
               const status = db.getServerStatus();
               if (status === false) {
