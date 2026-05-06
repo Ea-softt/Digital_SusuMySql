@@ -2424,6 +2424,7 @@ const AnalysisRow: React.FC<{ label: string, status?: string }> = ({ label, stat
   const renderAutoVerifyConfirmModal = () => {
       if (!isAutoVerifyConfirmOpen) return null;
       // Use the local mock to show projected eligibility (100% match)
+      // Count users who meet the perfect 100% match criteria
       const eligibleCount = pendingKYC.filter(u => calculateMatchScore(u) === 100).length;
 
       return (
