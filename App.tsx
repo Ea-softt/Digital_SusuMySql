@@ -96,12 +96,23 @@ const App: React.FC = () => {
   // Handle session restoration on mount
   useEffect(() => {
     const restoreSession = async () => {
+      // If we already have a user in state (e.g., just logged in), skip restoration
+      if (currentUser) return;
+
       const savedEmail = localStorage.getItem(SESSION_KEY);
       const savedToken = localStorage.getItem(TOKEN_KEY);
 
-      // 🛡️ Only attempt to refresh data if both email AND token exist
+      // 🛡️ Only attempt to restore session if both email AND token exist
       if (savedEmail && savedToken && db.getServerStatus() !== false) {
-        await refreshData();
+        // Re-sync basic data from the server to get the members list
+        await db.syncData();
+        const allUsers = db.getMembers();
+        const sessionUser = allUsers.find(u => u.email === savedEmail);
+        
+        if (sessionUser) {
+          // This populates the currentUser state and sets up group/view context
+          handleLogin(sessionUser, true); 
+        }
       }
       setIsRestoringSession(false);
     };
