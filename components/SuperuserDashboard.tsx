@@ -735,42 +735,38 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
       return 60 + (idSum % 40); 
   };
 
-  const runAutoVerification = () => {
+  const runAutoVerification = async () => {
       if (pendingKYC.length === 0) return;
       
       setIsAutoVerifying(true);
       setAutoVerifyProgress(0);
+      
+      let verifiedCount = 0;
+      const total = pendingKYC.length;
 
-      let currentProgress = 0;
-      const interval = setInterval(() => {
-          currentProgress += 5;
-          setAutoVerifyProgress(currentProgress);
-
-          if (currentProgress >= 100) {
-              clearInterval(interval);
-              let verifiedCount = 0;
+      try {
+          for (let i = 0; i < total; i++) {
+              const user = pendingKYC[i];
+              // Execute real backend AI analysis for every pending user
+              const result = await db.analyzeUserKYC(user.id);
               
-              pendingKYC.forEach(user => {
-                  const score = calculateMatchScore(user);
-                  if (score >= 80) {
-                      db.updateUser(user.id, { verificationStatus: 'VERIFIED', status: 'ACTIVE' });
-                      addLog(user, 'VERIFIED', 'AI Auto-Verification');
-                      verifiedCount++;
-                  }
-              });
-              
-              setTimeout(() => {
-                  onRefresh(); 
-                  setIsAutoVerifying(false);
-                  
-                  if (verifiedCount > 0) {
-                      alert(`Auto-Verification Successful: ${verifiedCount} users met the high-confidence threshold (80%+) and were verified.`);
-                  } else {
-                      alert("Auto-Verification Complete: No users met the high-confidence threshold (80%+) for automatic approval. Manual review required.");
-                  }
-              }, 500);
+              // Strictly require 100% score for auto-approval
+              if (result && result.overallScore === 100) {
+                  await db.updateUser(user.id, { verificationStatus: 'VERIFIED', status: 'ACTIVE' });
+                  addLog(user, 'VERIFIED', 'AI Auto-Verification (100% Match)');
+                  verifiedCount++;
+              }
+              setAutoVerifyProgress(Math.round(((i + 1) / total) * 100));
           }
-      }, 100);
+      } catch (error) {
+          console.error("Auto-verification process failed:", error);
+      } finally {
+          setIsAutoVerifying(false);
+          onRefresh();
+          alert(verifiedCount > 0 
+              ? `Auto-Verification Complete: ${verifiedCount} users with perfect 100% confidence were approved.` 
+              : "Auto-Verification Complete: No users achieved a 100% score for automatic approval. Manual review required.");
+      }
   };
   
   const handleStartAutoVerify = () => {
@@ -2427,9 +2423,8 @@ const AnalysisRow: React.FC<{ label: string, status?: string }> = ({ label, stat
 
   const renderAutoVerifyConfirmModal = () => {
       if (!isAutoVerifyConfirmOpen) return null;
-      
-      const eligibleUsers = pendingKYC.filter(u => calculateMatchScore(u) >= 80);
-      const eligibleCount = eligibleUsers.length;
+      // Use the local mock to show projected eligibility (100% match)
+      const eligibleCount = pendingKYC.filter(u => calculateMatchScore(u) === 100).length;
 
       return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
@@ -2446,7 +2441,7 @@ const AnalysisRow: React.FC<{ label: string, status?: string }> = ({ label, stat
                  
                  <div className="space-y-4 mb-6">
                      <p className="text-sm text-gray-600 dark:text-gray-300">
-                         The AI will analyze all <span className="font-bold">{pendingKYC.length}</span> pending requests. Users with a match score of <span className="font-bold text-green-600">80% or higher</span> will be automatically verified and activated.
+                         The AI will analyze all <span className="font-bold">{pendingKYC.length}</span> pending requests. Users with a match score of <span className="font-bold text-green-600">strictly 100%</span> will be automatically verified and activated.
                      </p>
                      
                      <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-100 dark:border-gray-600">
@@ -2463,7 +2458,7 @@ const AnalysisRow: React.FC<{ label: string, status?: string }> = ({ label, stat
                      {eligibleCount === 0 && (
                          <div className="flex items-center gap-2 text-xs text-orange-600 bg-orange-50 dark:bg-orange-900/20 p-2 rounded">
                              <AlertTriangle className="w-4 h-4" />
-                             No users currently meet the strict 80% threshold.
+                             No users currently meet the strict 100% threshold.
                          </div>
                      )}
                  </div>
