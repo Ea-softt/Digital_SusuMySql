@@ -1,7 +1,7 @@
 
 // ... imports ...
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { User, Transaction, Group, UserRole, AuditLog, KycAnalysisResult } from '../types';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { User, Transaction, Group, UserRole, AuditLog, KycAnalysisResult, Notification } from '../types';
 import { StatsCard } from './StatsCard';
 import { Users as UsersIcon, Shield, Activity, DollarSign, Search, AlertTriangle, CheckCircle, XCircle, Lock, Unlock, Trash2, Server, Database, Settings, ScanFace, BrainCircuit, X, TrendingUp, Download, Upload, AlertOctagon, Globe, PlusCircle, Calendar, Camera, MessageSquare, UserCog, ShieldAlert, ChevronRight, Wallet, ArrowUpRight, FileText, UserPlus, Mail, Loader2, Eye, MapPin, Smartphone, Cpu, Wifi, Phone, History, FileDown, Radar, ArrowLeft, Megaphone, Send, Clock, ShieldCheck, Info, Video, MoreVertical } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
@@ -65,6 +65,10 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   const [autoVerifyProgress, setAutoVerifyProgress] = useState(0);
   const [isAutoVerifyConfirmOpen, setIsAutoVerifyConfirmOpen] = useState(false);
   
+  // State for Pending Financial Confirmations (Deposits/Withdrawals)
+  const [pendingPayments, setPendingPayments] = useState<any[]>([]);
+  const [isLoadingPayments, setIsLoadingPayments] = useState(false);
+
   // State for KYC Rejection Note
   const [rejectionNote, setRejectionNote] = useState('');
   const [isRejecting, setIsRejecting] = useState(false);
@@ -196,6 +200,54 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [activeMenuGroupId]);
+
+  // Fetch pending payments (Deposits) from the backend
+  const fetchPendingPayments = useCallback(async () => {
+      setIsLoadingPayments(true);
+      try {
+          const token = localStorage.getItem('susu_jwt_token');
+          const response = await fetch('/api/admin/financials/pending', {
+              headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (response.ok) {
+              const data = await response.json();
+              setPendingPayments(Array.isArray(data) ? data : []);
+          }
+      } catch (error) {
+          console.error("Failed to fetch pending payments:", error);
+      } finally {
+          setIsLoadingPayments(false);
+      }
+  }, []);
+
+  useEffect(() => {
+      if (activeTab === 'financials') {
+          fetchPendingPayments();
+      }
+  }, [activeTab, fetchPendingPayments]);
+
+  const handleApprovePayment = async (reference: string) => {
+      if (!confirm("Confirm receipt of this deposit? This will update the member's wallet and platform ledger.")) return;
+      
+      try {
+          const token = localStorage.getItem('susu_jwt_token');
+          const response = await fetch('/api/admin/financials/approve-payment', {
+              method: 'PUT',
+              headers: { 
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}` 
+              },
+              body: JSON.stringify({ reference })
+          });
+          
+          if (response.ok) {
+              fetchPendingPayments();
+              onRefresh();
+          }
+      } catch (error) {
+          alert("Failed to reconcile payment.");
+      }
+  };
 
   // Update activeTab when initialTab prop changes (from sidebar navigation)
   const handleGroupAction = async () => {
@@ -1515,9 +1567,92 @@ const AnalysisRow: React.FC<{ label: string, status?: string }> = ({ label, stat
             trend: '+12%' // Mock trend
         }));
 
+    const pendingWithdrawals = transactions.filter(t => t.type === 'WITHDRAWAL' && t.status === 'PENDING');
+
     return (
         <div className="space-y-6 animate-fade-in">
-             {/* Financial Overview Section (Chart + Top Groups) */}
+             {/* Financial Approval Queue (Deposits & Withdrawals) */}
+             {(pendingPayments.length > 0 || pendingWithdrawals.length > 0) && (
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-orange-200 dark:border-orange-800 overflow-hidden mb-8">
+                    <div className="px-6 py-4 border-b border-orange-100 dark:border-orange-900 bg-orange-50 dark:bg-orange-900/20 flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                            <AlertTriangle className="w-5 h-5 text-orange-600" />
+                            <h3 className="font-bold text-orange-900 dark:text-orange-200">Financial Action Required</h3>
+                        </div>
+                        <span className="text-xs font-bold text-orange-700 dark:text-orange-400 bg-white dark:bg-gray-700 px-2 py-1 rounded border border-orange-200 dark:border-orange-700">
+                            {pendingPayments.length + pendingWithdrawals.length} Pending
+                        </span>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-gray-50 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400">
+                                <tr>
+                                    <th className="px-6 py-3">Member / Admin</th>
+                                    <th className="px-6 py-3">Transaction Type</th>
+                                    <th className="px-6 py-3">Amount</th>
+                                    <th className="px-6 py-3">Details</th>
+                                    <th className="px-6 py-3 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                {/* Pending Deposits from payment_confirmations table */}
+                                {pendingPayments.map(p => (
+                                    <tr key={p.reference} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                        <td className="px-6 py-4">
+                                            <div className="font-bold text-gray-900 dark:text-white">{p.userName}</div>
+                                            <div className="text-[10px] text-gray-500">{p.userEmail}</div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                                                <PlusCircle className="w-3 h-3" /> DEPOSIT
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 font-black text-gray-900 dark:text-white">GHS {p.amount.toLocaleString()}</td>
+                                        <td className="px-6 py-4">
+                                            <div className="text-xs text-gray-500">Ref: <span className="font-mono">{p.reference}</span></div>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <button 
+                                                onClick={() => handleApprovePayment(p.reference)}
+                                                className="px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-xs shadow-sm"
+                                            >
+                                                Confirm Receipt
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {/* Pending Withdrawals from transactions table */}
+                                {pendingWithdrawals.map(tx => (
+                                    <tr key={tx.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                        <td className="px-6 py-4">
+                                            <div className="font-bold text-gray-900 dark:text-white">{tx.userName}</div>
+                                            <div className="text-[10px] text-gray-500">User ID: {tx.userId}</div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300">
+                                                <ArrowUpRight className="w-3 h-3" /> WITHDRAWAL
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 font-black text-gray-900 dark:text-white">GHS {tx.amount.toLocaleString()}</td>
+                                        <td className="px-6 py-4">
+                                            <div className="text-xs text-gray-500">ID: <span className="font-mono">{tx.id}</span></div>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <button 
+                                                onClick={() => db.verifyTransaction(tx.id).then(() => { fetchPendingPayments(); onRefresh(); })}
+                                                className="px-4 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-bold text-xs shadow-sm"
+                                            >
+                                                Approve Withdrawal
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+             )}
+
              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                  {/* Revenue Chart */}
                  <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
