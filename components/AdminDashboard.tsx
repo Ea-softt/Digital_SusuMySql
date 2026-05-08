@@ -296,7 +296,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ group: initialGr
                       type: 'DEPOSIT',
                       amount: amount,
                       date: new Date().toISOString().split('T')[0],
-                      status: 'COMPLETED'
+                      status: 'PENDING'
                   };
                   await db.addTransaction(newTx);
                   if (onRefresh) onRefresh();

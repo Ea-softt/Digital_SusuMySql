@@ -306,7 +306,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ group, transac
                         type: 'DEPOSIT',
                         amount: amount,
                         date: new Date().toISOString().split('T')[0],
-                        status: 'COMPLETED',
+                        status: 'PENDING',
                         groupId: isGlobalContext ? undefined : group.id,
                    };
                    await db.addTransaction(newTx, isGlobalContext ? undefined : group.id);

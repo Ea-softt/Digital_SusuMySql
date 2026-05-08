@@ -1,7 +1,7 @@
 
 // ... imports ...
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { User, Transaction, Group, UserRole, AuditLog, KycAnalysisResult, Notification } from '../types';
+import { User, Transaction, Group, UserRole, AuditLog, KycAnalysisResult, Notification, PendingDeposit } from '../types';
 import { StatsCard } from './StatsCard';
 import { Users as UsersIcon, Shield, Activity, DollarSign, Search, AlertTriangle, CheckCircle, XCircle, Lock, Unlock, Trash2, Server, Database, Settings, ScanFace, BrainCircuit, X, TrendingUp, Download, Upload, AlertOctagon, Globe, PlusCircle, Calendar, Camera, MessageSquare, UserCog, ShieldAlert, ChevronRight, Wallet, ArrowUpRight, FileText, UserPlus, Mail, Loader2, Eye, MapPin, Smartphone, Cpu, Wifi, Phone, History, FileDown, Radar, ArrowLeft, Megaphone, Send, Clock, ShieldCheck, Info, Video, MoreVertical } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
@@ -65,10 +65,6 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   const [autoVerifyProgress, setAutoVerifyProgress] = useState(0);
   const [isAutoVerifyConfirmOpen, setIsAutoVerifyConfirmOpen] = useState(false);
   
-  // State for Pending Financial Confirmations (Deposits/Withdrawals)
-  const [pendingPayments, setPendingPayments] = useState<any[]>([]);
-  const [isLoadingPayments, setIsLoadingPayments] = useState(false);
-
   // State for KYC Rejection Note
   const [rejectionNote, setRejectionNote] = useState('');
   const [isRejecting, setIsRejecting] = useState(false);
@@ -201,47 +197,28 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [activeMenuGroupId]);
 
-  // Fetch pending payments (Deposits) from the backend
-  const fetchPendingPayments = useCallback(async () => {
-      setIsLoadingPayments(true);
-      try {
-          const token = localStorage.getItem('susu_jwt_token');
-          const response = await fetch('/api/admin/financials/pending', {
-              headers: { 'Authorization': `Bearer ${token}` }
-          });
-          if (response.ok) {
-              const data = await response.json();
-              setPendingPayments(Array.isArray(data) ? data : []);
-          }
-      } catch (error) {
-          console.error("Failed to fetch pending payments:", error);
-      } finally {
-          setIsLoadingPayments(false);
-      }
-  }, []);
-
-  useEffect(() => {
-      if (activeTab === 'financials') {
-          fetchPendingPayments();
-      }
-  }, [activeTab, fetchPendingPayments]);
+  // 🚀 PERFORMANCE: Derive pending deposits directly from props instead of fetching
+  // This ensures the data is always in sync with the global state in App.tsx
+  const pendingDeposits = useMemo(() => {
+      return transactions
+          .filter(t => t.type === 'DEPOSIT' && t.status === 'PENDING')
+          .map(t => ({
+              reference: t.id,
+              userId: t.userId,
+              userName: t.userName,
+              userEmail: members.find(m => m.id === t.userId)?.email || 'N/A',
+              amount: t.amount
+          }));
+  }, [transactions, members]);
 
   const handleApprovePayment = async (reference: string) => {
-      if (!confirm("Confirm receipt of this deposit? This will update the member's wallet and platform ledger.")) return;
+      if (!confirm("Confirm receipt of this deposit? This will mark the transaction as completed and update the member's wallet.")) return;
       
       try {
-          const token = localStorage.getItem('susu_jwt_token');
-          const response = await fetch('/api/admin/financials/approve-payment', {
-              method: 'PUT',
-              headers: { 
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}` 
-              },
-              body: JSON.stringify({ reference })
-          });
+          const success = await db.verifyTransaction(reference);
           
-          if (response.ok) {
-              fetchPendingPayments();
+          if (success) {
+              alert("Deposit confirmed and member's wallet updated.");
               onRefresh();
           }
       } catch (error) {
@@ -1572,7 +1549,7 @@ const AnalysisRow: React.FC<{ label: string, status?: string }> = ({ label, stat
     return (
         <div className="space-y-6 animate-fade-in">
              {/* Financial Approval Queue (Deposits & Withdrawals) */}
-             {(pendingPayments.length > 0 || pendingWithdrawals.length > 0) && (
+             {(pendingDeposits.length > 0 || pendingWithdrawals.length > 0) && (
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-orange-200 dark:border-orange-800 overflow-hidden mb-8">
                     <div className="px-6 py-4 border-b border-orange-100 dark:border-orange-900 bg-orange-50 dark:bg-orange-900/20 flex justify-between items-center">
                         <div className="flex items-center gap-2">
@@ -1580,7 +1557,7 @@ const AnalysisRow: React.FC<{ label: string, status?: string }> = ({ label, stat
                             <h3 className="font-bold text-orange-900 dark:text-orange-200">Financial Action Required</h3>
                         </div>
                         <span className="text-xs font-bold text-orange-700 dark:text-orange-400 bg-white dark:bg-gray-700 px-2 py-1 rounded border border-orange-200 dark:border-orange-700">
-                            {pendingPayments.length + pendingWithdrawals.length} Pending
+                            {pendingDeposits.length + pendingWithdrawals.length} Pending
                         </span>
                     </div>
                     <div className="overflow-x-auto">
@@ -1595,8 +1572,8 @@ const AnalysisRow: React.FC<{ label: string, status?: string }> = ({ label, stat
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                {/* Pending Deposits from payment_confirmations table */}
-                                {pendingPayments.map(p => (
+                                {/* Pending Deposits derived from transaction history */}
+                                {pendingDeposits.map(p => (
                                     <tr key={p.reference} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                                         <td className="px-6 py-4">
                                             <div className="font-bold text-gray-900 dark:text-white">{p.userName}</div>
@@ -1639,7 +1616,7 @@ const AnalysisRow: React.FC<{ label: string, status?: string }> = ({ label, stat
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <button 
-                                                onClick={() => db.verifyTransaction(tx.id).then(() => { fetchPendingPayments(); onRefresh(); })}
+                                                onClick={() => db.verifyTransaction(tx.id).then(() => onRefresh())}
                                                 className="px-4 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-bold text-xs shadow-sm"
                                             >
                                                 Approve Withdrawal
