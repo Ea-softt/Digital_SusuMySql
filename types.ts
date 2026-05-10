@@ -182,3 +182,12 @@ export interface AuditLog {
   reason: string;
   admin: string;
 }
+
+// Interface for deposits awaiting Superuser confirmation
+export interface PendingDeposit {
+  reference: string; // Unique reference for the payment (Paystack Ref)
+  userId: string;
+  userName: string;
+  userEmail: string;
+  amount: number;
+}

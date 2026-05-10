@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { User, Transaction, Group, UserRole, AuditLog, KycAnalysisResult, Notification, PendingDeposit } from '../types';
 import { StatsCard } from './StatsCard';
-import { Users as UsersIcon, Shield, Activity, DollarSign, Search, AlertTriangle, CheckCircle, XCircle, Lock, Unlock, Trash2, Server, Database, Settings, ScanFace, BrainCircuit, X, TrendingUp, Download, Upload, AlertOctagon, Globe, PlusCircle, Calendar, Camera, MessageSquare, UserCog, ShieldAlert, ChevronRight, Wallet, ArrowUpRight, FileText, UserPlus, Mail, Loader2, Eye, MapPin, Smartphone, Cpu, Wifi, Phone, History, FileDown, Radar, ArrowLeft, Megaphone, Send, Clock, ShieldCheck, Info, Video, MoreVertical } from 'lucide-react';
+import { Users as UsersIcon, Shield, Activity, DollarSign, Search, AlertTriangle, CheckCircle, XCircle, Lock, Unlock, Trash2, Server, Database, Settings, ScanFace, BrainCircuit, X, TrendingUp, Download, Upload, AlertOctagon, Globe, PlusCircle, Calendar, Camera, MessageSquare, UserCog, ShieldAlert, ChevronRight, Wallet, ArrowUpRight, FileText, UserPlus, Mail, Loader2, Eye, MapPin, Smartphone, Cpu, Wifi, Phone, History, FileDown, Radar, ArrowLeft, Megaphone, Send, Clock, ShieldCheck, Info, Video, MoreVertical, Copy } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { db } from '../services/database';
 import { GroupChat } from './GroupChat';
@@ -212,7 +212,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   }, [transactions, members]);
 
   const handleApprovePayment = async (reference: string) => {
-      if (!confirm("Confirm receipt of this deposit? This will mark the transaction as completed and update the member's wallet.")) return;
+      if (!confirm(`Confirm receipt of deposit with Paystack Ref: ${reference}? This will mark the transaction as completed and update the member's wallet.`)) return;
       
       try {
           const success = await db.verifyTransaction(reference);
@@ -1586,7 +1586,16 @@ const AnalysisRow: React.FC<{ label: string, status?: string }> = ({ label, stat
                                         </td>
                                         <td className="px-6 py-4 font-black text-gray-900 dark:text-white">GHS {p.amount.toLocaleString()}</td>
                                         <td className="px-6 py-4">
-                                            <div className="text-xs text-gray-500">Ref: <span className="font-mono">{p.reference}</span></div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="text-xs text-gray-500">Paystack Ref: <span className="font-mono font-bold text-primary-600 dark:text-primary-400">{p.reference}</span></div>
+                                                <button 
+                                                    onClick={() => { navigator.clipboard.writeText(p.reference); alert("Reference copied to clipboard."); }}
+                                                    className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                                                    title="Copy Reference"
+                                                >
+                                                    <Copy className="w-3 h-3 text-gray-400" />
+                                                </button>
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <button 
@@ -1612,7 +1621,16 @@ const AnalysisRow: React.FC<{ label: string, status?: string }> = ({ label, stat
                                         </td>
                                         <td className="px-6 py-4 font-black text-gray-900 dark:text-white">GHS {tx.amount.toLocaleString()}</td>
                                         <td className="px-6 py-4">
-                                            <div className="text-xs text-gray-500">ID: <span className="font-mono">{tx.id}</span></div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="text-xs text-gray-500">System ID: <span className="font-mono font-bold text-orange-600 dark:text-orange-400">{tx.id}</span></div>
+                                                <button 
+                                                    onClick={() => { navigator.clipboard.writeText(tx.id); alert("ID copied to clipboard."); }}
+                                                    className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                                                    title="Copy ID"
+                                                >
+                                                    <Copy className="w-3 h-3 text-gray-400" />
+                                                </button>
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <button 
