@@ -80,6 +80,7 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   // --- Financials Tab State ---
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [isReconciling, setIsReconciling] = useState<string | null>(null);
   const [viewTransaction, setViewTransaction] = useState<Transaction | null>(null);
   const [financialFilter, setFinancialFilter] = useState<'ALL' | 'REVENUE' | 'WITHDRAWAL'>('ALL');
 
@@ -212,17 +213,50 @@ export const SuperuserDashboard: React.FC<SuperuserDashboardProps> = ({ members,
   }, [transactions, members]);
 
   const handleApprovePayment = async (reference: string) => {
-      if (!confirm(`Confirm receipt of deposit with Paystack Ref: ${reference}? This will mark the transaction as completed and update the member's wallet.`)) return;
-      
       try {
-          const success = await db.verifyTransaction(reference);
+          setIsReconciling(reference);
+          const token = localStorage.getItem('susu_jwt_token');
           
-          if (success) {
+          // 1. Double-Check with Paystack API proxy for truth
+          const psResponse = await fetch(`/api/admin/financials/verify-paystack/${reference}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (!psResponse.ok) throw new Error("Could not reach Paystack verification proxy.");
+          
+          const psData = await psResponse.json();
+          
+          if (!psData.status || !psData.data || psData.data.status !== 'success') {
+              alert(`Paystack could not verify this payment. Status: ${psData.data?.status || 'Not Found'}. Please do not approve until funds are visible in your Paystack dashboard.`);
+              return;
+          }
+
+          const psAmount = psData.data.amount / 100; // Convert pesewas to GHS
+          if (!confirm(`Paystack confirms receipt of GHS ${psAmount.toLocaleString()} (Ref: ${reference}). Finalize platform reconciliation and credit member wallet?`)) {
+              return;
+          }
+
+          // 2. Reconcile on Platform Backend
+          const response = await fetch('/api/admin/financials/approve-payment', {
+              method: 'PUT',
+              headers: { 
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}` 
+              },
+              body: JSON.stringify({ reference })
+          });
+          
+          if (response.ok) {
               alert("Deposit confirmed and member's wallet updated.");
               onRefresh();
+          } else {
+              const errData = await response.json();
+              throw new Error(errData.error || "Internal server error during reconciliation.");
           }
       } catch (error) {
-          alert("Failed to reconcile payment.");
+          console.error("Reconciliation Error:", error);
+          alert(`Failed to reconcile payment: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+          setIsReconciling(null);
       }
   };
 
@@ -1600,9 +1634,10 @@ const AnalysisRow: React.FC<{ label: string, status?: string }> = ({ label, stat
                                         <td className="px-6 py-4 text-right">
                                             <button 
                                                 onClick={() => handleApprovePayment(p.reference)}
-                                                className="px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-xs shadow-sm"
+                                                disabled={isReconciling === p.reference}
+                                                className="px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-xs shadow-sm disabled:opacity-50 min-w-[120px]"
                                             >
-                                                Confirm Receipt
+                                                {isReconciling === p.reference ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : 'Confirm Receipt'}
                                             </button>
                                         </td>
                                     </tr>
@@ -1634,7 +1669,25 @@ const AnalysisRow: React.FC<{ label: string, status?: string }> = ({ label, stat
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <button 
-                                                onClick={() => db.verifyTransaction(tx.id).then(() => onRefresh())}
+                                                onClick={async () => {
+                                                    // 🛡️ SECURITY: Verify member actually has the money in their platform wallet
+                                                    const userTxs = transactions.filter(t => t.userId === tx.userId && t.status === 'COMPLETED');
+                                                    const balance = userTxs.reduce((sum, t) => {
+                                                        if (t.type === 'DEPOSIT' || t.type === 'PAYOUT') return sum + t.amount;
+                                                        if (t.type === 'WITHDRAWAL' || t.type === 'CONTRIBUTION') return sum - t.amount;
+                                                        return sum;
+                                                    }, 0);
+
+                                                    if (balance < tx.amount) {
+                                                        alert(`FRAUD ALERT: Member has insufficient funds. \nWallet Balance: GHS ${balance.toLocaleString()} \nRequested: GHS ${tx.amount.toLocaleString()}`);
+                                                        return;
+                                                    }
+
+                                                    if (confirm(`Approve GHS ${tx.amount} withdrawal for ${tx.userName}?`)) {
+                                                        await db.verifyTransaction(tx.id);
+                                                        onRefresh();
+                                                    }
+                                                }}
                                                 className="px-4 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-bold text-xs shadow-sm"
                                             >
                                                 Approve Withdrawal

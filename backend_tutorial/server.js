@@ -734,6 +734,18 @@ app.get('/api/admin/financials/pending', authorizeRoles('SUPERUSER'), async (req
 });
 
 /**
+ * PLATFORM FINANCIALS: Verify actual payment status with Paystack
+ */
+app.get('/api/admin/financials/verify-paystack/:reference', authorizeRoles('SUPERUSER'), async (req, res) => {
+    try {
+        const result = await paystackRequest(`/transaction/verify/${req.params.reference}`, 'GET');
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
  * PLATFORM FINANCIALS: Superuser manual approval
  */
 app.put('/api/admin/financials/approve-payment', authorizeRoles('SUPERUSER'), async (req, res) => {
@@ -744,13 +756,19 @@ app.put('/api/admin/financials/approve-payment', authorizeRoles('SUPERUSER'), as
     try {
         await connection.beginTransaction();
         
-        // 1. Mark the confirmation as completed
+        // 1. Update the payment_confirmations record
         const [result] = await connection.query(
             'UPDATE payment_confirmations SET status = "COMPLETED", approved_by = ? WHERE reference = ? AND status = "PENDING"',
             [superuserId, reference]
         );
 
         if (result.affectedRows === 0) throw new Error("Payment not found or already processed.");
+
+        // 2. Synchronize the Platform Transaction Ledger
+        await connection.query(
+            'UPDATE transactions SET status = "COMPLETED" WHERE id = ?',
+            [reference]
+        );
 
         await connection.commit();
         res.json({ success: true, message: "Payment reconciled and approved." });
