@@ -1,4 +1,5 @@
 import PaystackPop from '@paystack/inline-js';
+import { db } from './database';
 
 /**
  * Paystack Service for handling frontend payments and interacting with the backend for transfers.
@@ -21,7 +22,7 @@ export const initializePaystackPayment = async (options: PaystackPaymentOptions)
   try {
     // Fetch the Public Key from the backend to keep it out of the frontend source code bundle
     // Using relative path to utilize the Vite proxy defined in vite.config.ts
-    const response = await fetch('/api/paystack/key', { cache: 'no-cache' });
+    const response = await db.apiFetch('/paystack/key', { cache: 'no-cache' });
     
     if (!response.ok) {
         throw new Error(`Server returned ${response.status} (${response.statusText}) at /api/paystack/key`);
@@ -68,11 +69,8 @@ export const initiateWithdrawal = async (data: {
     userId: string;
 }) => {
     // This calls your server endpoint which implements the Node.js snippet you provided
-    const response = await fetch('/api/paystack/withdraw', {
+    const response = await db.apiFetch('/paystack/withdraw', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
         body: JSON.stringify(data)
     });
     

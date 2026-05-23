@@ -103,14 +103,18 @@ const App: React.FC = () => {
         const savedToken = localStorage.getItem(TOKEN_KEY);
 
         if (savedEmail && savedToken && db.getServerStatus() !== false) {
-            // Use targeted sync instead of full platform sync to speed up boot time
-            await db.syncData(); 
-            const allUsers = db.getMembers();
-            const sessionUser = allUsers.find(u => u.email === savedEmail);
-            
-            if (sessionUser) {
-                // Await handleLogin to ensure data is ready before UI appears
-                await handleLogin(sessionUser, true, savedToken); 
+            try {
+                // Instead of a general sync, lookup the specific user profile to restore the session
+                const userRes = await db.apiFetch(`/users/${encodeURIComponent(savedEmail)}`);
+                if (userRes.ok) {
+                    const userData = await userRes.json();
+                    const sessionUser = db.mapUser(userData);
+                    
+                    // Await handleLogin to ensure data is ready before UI appears
+                    await handleLogin(sessionUser, true, savedToken); 
+                }
+            } catch (err) {
+                console.error("Session restoration failed:", err);
             }
         }
         setIsRestoringSession(false);

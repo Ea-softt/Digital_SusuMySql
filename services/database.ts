@@ -24,19 +24,28 @@ class DatabaseService {
     platformFeePercentage: 0.5
   };
 
-  constructor() {
-    this.syncData();
-  }
+  constructor() {}
 
-  private async apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
-    const headers = {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    };
+  public async apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
+    // Ensure the latest token is synced before every call
+    this.token = localStorage.getItem('susu_jwt_token');
+
+    const headers = new Headers(options.headers);
+    if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
+      headers.set('Content-Type', 'application/json');
+    }
+
     if (this.token) {
-      (headers as any)['Authorization'] = `Bearer ${this.token}`;
+      headers.set('Authorization', `Bearer ${this.token}`);
     }
     return fetch(`${API_BASE}${path}`, { ...options, headers });
+  }
+
+  private safeIsoDate(dateStr?: string): string {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    return d.toISOString();
   }
 
   private isValidImage(str?: string): boolean {
@@ -45,7 +54,7 @@ class DatabaseService {
       return str.startsWith('data:image/') || str.startsWith('http');
   }
 
-  private mapUser(u: any): User {
+  public mapUser(u: any): User {
     if (!u) return {} as User;
     const name = u.name || 'Unknown';
     return {
@@ -62,7 +71,7 @@ class DatabaseService {
       kycId: u.kycId || u.kyc_id || '',
       status: u.status || 'NEW',
       verificationStatus: u.verificationStatus || u.verification_status || 'UNVERIFIED',
-      joinDate: (u.joinDate || u.join_date) ? new Date(u.joinDate || u.join_date).toISOString().split('T')[0] : '',
+      joinDate: this.safeIsoDate(u.joinDate || u.join_date || u.joined_at),
       reliabilityScore: u.reliabilityScore || u.reliability_score || 0,
       memberships: [],
       kycDocumentFront: u.kycDocumentFront || u.kyc_document_front || u.kyc_document_image || null,
@@ -78,7 +87,7 @@ class DatabaseService {
       userId: gm.user_id || '', // Map user_id to userId
       role: gm.role || 'MEMBER',
       status: gm.status || 'PENDING',
-      joinDate: (gm.joined_at || gm.joinDate) ? new Date(gm.joined_at || gm.joinDate).toISOString().split('T')[0] : '',
+      joinDate: this.safeIsoDate(gm.joined_at || gm.joinDate),
       isBlocked: gm.is_blocked || false,
       isDeleted: gm.is_deleted || false,
       verifierId: gm.verifier_id || undefined,
@@ -109,15 +118,15 @@ class DatabaseService {
       totalPool: Number(g.total_pool || 0),
       membersCount: Number(g.members_count || 0),
       cycleNumber: Number(g.cycle_number || 1),
-      nextPayoutDate: g.next_payout_date ? new Date(g.next_payout_date).toISOString().split('T')[0] : '',
+      nextPayoutDate: g.next_payout_date ? this.safeIsoDate(g.next_payout_date).split('T')[0] : '',
       inviteCode: g.invite_code || '',
       welcomeMessage: g.welcome_message || '',
       icon: this.isValidImage(g.icon) ? g.icon : '', 
       payoutSchedule: schedule, 
       reminderDaysBefore: 3,
       status: g.status || 'ACTIVE',
-      cycleStartDate: g.cycle_start_date ? new Date(g.cycle_start_date).toISOString() : undefined,
-      cycleEndDate: g.cycle_end_date ? new Date(g.cycle_end_date).toISOString() : undefined,
+      cycleStartDate: g.cycle_start_date ? this.safeIsoDate(g.cycle_start_date) : undefined,
+      cycleEndDate: g.cycle_end_date ? this.safeIsoDate(g.cycle_end_date) : undefined,
       scheduledPayoutAmount: Number(g.scheduled_payout_amount || 0),
       approvedBy: g.approved_by,
       callActive: Boolean(g.call_active)
@@ -132,7 +141,7 @@ class DatabaseService {
       userName: t.userName || 'System', 
       type: t.type || 'CONTRIBUTION',
       amount: Number(t.amount || 0),
-      date: t.date ? new Date(t.date).toISOString() : '',
+      date: t.date ? this.safeIsoDate(t.date) : new Date().toISOString(),
       status: t.status || 'PENDING',
       groupId: t.group_id || undefined,
       is_rolled_back: t.is_rolled_back || false,
@@ -160,7 +169,10 @@ class DatabaseService {
 
       this.isServerOnline = true;
       
-      // Fix for 429: Throttle data fetching to once every 15 seconds
+      // Fix for Access Denied: Sync local token state
+      this.token = localStorage.getItem('susu_jwt_token');
+
+      // Fix for 429: Throttle background data fetching to once every 15 seconds
       if (Date.now() - this.lastDataFetch < 15000 && this.members.length > 0) {
         return true; 
       }
@@ -179,7 +191,18 @@ class DatabaseService {
         }
       }
 
-      const currentUser = userId ? this.members.find(m => m.id === userId) : null;
+      // Fix for Dashboard not showing: Ensure the active user profile is in the local cache
+      // and always prioritize specific profile fetch over global list to prevent 403s
+      if (userId && (this.token || localStorage.getItem('susu_jwt_token'))) {
+          const res = await this.apiFetch(`/users/${userId}`);
+          if (res.ok) {
+              const updatedUser = this.mapUser(await res.json());
+              this.members = this.members.filter(m => m.id !== userId).concat(updatedUser);
+          }
+      }
+
+      // Re-evaluate currentUser after specific fetch to ensure it is in the members array
+      let currentUser = userId ? this.members.find(m => m.id === userId) : null;
 
       if (userId) {
           if (currentUser && currentUser.role === UserRole.SUPERUSER) {
